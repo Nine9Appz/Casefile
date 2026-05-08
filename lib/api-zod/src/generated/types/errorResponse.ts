@@ -5,7 +5,8 @@
  * Protocol SIFT API
  * OpenAPI spec version: 0.1.0
  */
+import type { ErrorDetail } from "./errorDetail";
 
-export interface HealthStatus {
-  status: string;
+export interface ErrorResponse {
+  error: ErrorDetail;
 }

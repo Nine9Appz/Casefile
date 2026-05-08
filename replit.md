@@ -36,7 +36,7 @@ License: MIT.
 
 - [x] Step 1 — MIT license + OpenAI AI integration setup
 - [x] Step 2 — Database schema (cases, artifacts, analysis steps, exec logs, reports)
-- [ ] Step 3 — OpenAPI spec + codegen
+- [x] Step 3 — OpenAPI spec + codegen + 11 REST endpoints
 - [ ] Step 4 — Forensic tool suite (log parser, IOC extractor, timeline, network, entropy, MCP)
 - [ ] Step 5 — Evidence integrity enforcement (architectural read-only boundary)
 - [ ] Step 6 — Autonomous agent reasoning loop (streaming SSE)

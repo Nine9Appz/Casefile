@@ -3,13 +3,23 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Protocol SIFT API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: cases
+    description: Forensic cases
+  - name: artifacts
+    description: Evidence artifacts (immutable once uploaded)
+  - name: steps
+    description: Agent reasoning steps
+  - name: logs
+    description: Raw tool execution audit trail
+  - name: reports
+    description: Final incident reports
 paths:
   /healthz:
     get:
@@ -24,13 +34,556 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /cases:
+    post:
+      operationId: createCase
+      tags: [cases]
+      summary: Create a case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCaseRequest"
+      responses:
+        "201":
+          description: Case created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    get:
+      operationId: listCases
+      tags: [cases]
+      summary: List cases
+      description: Returns up to 200 cases, newest first.
+      responses:
+        "200":
+          description: Cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Case"
+
+  /cases/{caseId}:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      operationId: getCase
+      tags: [cases]
+      summary: Get a case (hydrated with artifacts, steps, logs, and report)
+      responses:
+        "200":
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCase
+      tags: [cases]
+      summary: Delete a case (cascades to all artifacts, steps, logs, and reports)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cases/{caseId}/artifacts:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: createArtifact
+      tags: [artifacts]
+      summary: Upload an evidence artifact
+      description: |
+        Server computes the SHA256 hash and byte size from the submitted content.
+        Maximum content size is 10 MB; larger requests return 413.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateArtifactRequest"
+      responses:
+        "201":
+          description: Artifact stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artifact"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+    get:
+      operationId: listCaseArtifacts
+      tags: [artifacts]
+      summary: List a case's artifacts (metadata only — no content)
+      responses:
+        "200":
+          description: Artifacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Artifact"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /artifacts/{artifactId}:
+    parameters:
+      - $ref: "#/components/parameters/ArtifactId"
+    get:
+      operationId: getArtifact
+      tags: [artifacts]
+      summary: Get a single artifact with full content
+      responses:
+        "200":
+          description: Artifact with content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactWithContent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cases/{caseId}/steps:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      operationId: listCaseSteps
+      tags: [steps]
+      summary: List the analysis steps for a case in order
+      responses:
+        "200":
+          description: Steps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AnalysisStep"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cases/{caseId}/logs:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      operationId: listCaseLogs
+      tags: [logs]
+      summary: List the raw execution logs for a case
+      responses:
+        "200":
+          description: Execution logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExecutionLog"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /steps/{stepId}/logs:
+    parameters:
+      - $ref: "#/components/parameters/StepId"
+    get:
+      operationId: listStepLogs
+      tags: [logs]
+      summary: List the execution logs produced by a single analysis step
+      responses:
+        "200":
+          description: Execution logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExecutionLog"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cases/{caseId}/report:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      operationId: getCaseReport
+      tags: [reports]
+      summary: Get the incident report for a case
+      responses:
+        "200":
+          description: Incident report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentReport"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
+  parameters:
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ArtifactId:
+      name: artifactId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StepId:
+      name: stepId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: Request body exceeded the size limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code (snake_case)
+        message:
+          type: string
+          description: Human-readable explanation
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional structured context
+
+    CaseStatus:
+      type: string
+      enum: [pending, analyzing, complete, failed]
+    ArtifactKind:
+      type: string
+      enum: [log_file, network_capture, memory_strings, text, mcp_endpoint]
+    AnalysisPhase:
+      type: string
+      enum: [triage, deep_analysis, synthesis, self_correction]
+
+    CreateCaseRequest:
+      type: object
+      required: [title, description]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+          maxLength: 10000
+
+    Case:
+      type: object
+      required: [id, title, description, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CaseDetail:
+      type: object
+      required: [case, artifacts, steps, logs]
+      properties:
+        case:
+          $ref: "#/components/schemas/Case"
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisStep"
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExecutionLog"
+        report:
+          oneOf:
+            - $ref: "#/components/schemas/IncidentReport"
+            - type: "null"
+
+    CreateArtifactRequest:
+      type: object
+      required: [kind, content]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ArtifactKind"
+        filename:
+          type: string
+          maxLength: 255
+        content:
+          type: string
+          description: Raw evidence content. Max 10 MB after UTF-8 encoding.
+
+    Artifact:
+      type: object
+      required: [id, caseId, kind, sha256Hash, sizeBytes, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/ArtifactKind"
+        filename:
+          type: string
+          nullable: true
+        sha256Hash:
+          type: string
+          minLength: 64
+          maxLength: 64
+        sizeBytes:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    ArtifactWithContent:
+      type: object
+      required: [id, caseId, kind, sha256Hash, sizeBytes, createdAt, content]
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/ArtifactKind"
+        filename:
+          type: string
+          nullable: true
+        sha256Hash:
+          type: string
+          minLength: 64
+          maxLength: 64
+        sizeBytes:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        content:
+          type: string
+
+    AnalysisStep:
+      type: object
+      required:
+        [
+          id,
+          caseId,
+          stepNumber,
+          phase,
+          rationale,
+          expected,
+          found,
+          nextStep,
+          tokensUsed,
+          durationMs,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        stepNumber:
+          type: integer
+          minimum: 1
+        phase:
+          $ref: "#/components/schemas/AnalysisPhase"
+        toolUsed:
+          type: string
+          nullable: true
+        rationale:
+          type: string
+        expected:
+          type: string
+        found:
+          type: string
+        nextStep:
+          type: string
+        tokensUsed:
+          type: integer
+          minimum: 0
+        durationMs:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    ExecutionLog:
+      type: object
+      required:
+        [
+          id,
+          caseId,
+          toolName,
+          input,
+          output,
+          tokensPrompt,
+          tokensCompletion,
+          startedAt,
+          endedAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        analysisStepId:
+          type: string
+          format: uuid
+          nullable: true
+        artifactId:
+          type: string
+          format: uuid
+          nullable: true
+        toolName:
+          type: string
+        input:
+          description: Arbitrary JSON input passed to the tool
+        output:
+          description: Arbitrary JSON output returned by the tool
+        tokensPrompt:
+          type: integer
+          minimum: 0
+        tokensCompletion:
+          type: integer
+          minimum: 0
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+          nullable: true
+
+    IncidentReport:
+      type: object
+      required:
+        [id, caseId, summary, iocs, ttps, timeline, recommendations, generatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        summary:
+          type: string
+        iocs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        ttps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        timeline:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        confidenceScore:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+        recommendations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        generatedAt:
+          type: string
+          format: date-time

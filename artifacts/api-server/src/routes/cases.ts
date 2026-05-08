@@ -1,0 +1,235 @@
+import {
+  analysisStepsTable,
+  caseArtifactsTable,
+  casesTable,
+  db,
+  executionLogsTable,
+  incidentReportsTable,
+} from "@workspace/db";
+import { asc, desc, eq } from "drizzle-orm";
+import { Router, type IRouter } from "express";
+import {
+  CreateArtifactBody,
+  CreateCaseBody,
+} from "@workspace/api-zod";
+import { BadRequestError, NotFoundError, PayloadTooLargeError } from "../lib/errors";
+import { sha256Hex, utf8ByteLength } from "../lib/hash";
+
+const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024; // 10 MB
+
+const router: IRouter = Router();
+
+router.post("/cases", async (req, res) => {
+  const body = CreateCaseBody.parse(req.body);
+  const [created] = await db.insert(casesTable).values(body).returning();
+  res.status(201).json(created);
+});
+
+router.get("/cases", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(casesTable)
+    .orderBy(desc(casesTable.createdAt))
+    .limit(200);
+  res.json(rows);
+});
+
+router.get("/cases/:caseId", async (req, res) => {
+  const { caseId } = req.params;
+  const [caseRow] = await db
+    .select()
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId));
+  if (!caseRow) {
+    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
+  }
+
+  const [artifacts, steps, logs, [report]] = await Promise.all([
+    db
+      .select({
+        id: caseArtifactsTable.id,
+        caseId: caseArtifactsTable.caseId,
+        kind: caseArtifactsTable.kind,
+        filename: caseArtifactsTable.filename,
+        sha256Hash: caseArtifactsTable.sha256Hash,
+        sizeBytes: caseArtifactsTable.sizeBytes,
+        createdAt: caseArtifactsTable.createdAt,
+      })
+      .from(caseArtifactsTable)
+      .where(eq(caseArtifactsTable.caseId, caseId))
+      .orderBy(asc(caseArtifactsTable.createdAt)),
+    db
+      .select()
+      .from(analysisStepsTable)
+      .where(eq(analysisStepsTable.caseId, caseId))
+      .orderBy(asc(analysisStepsTable.stepNumber)),
+    db
+      .select()
+      .from(executionLogsTable)
+      .where(eq(executionLogsTable.caseId, caseId))
+      .orderBy(asc(executionLogsTable.startedAt)),
+    db
+      .select()
+      .from(incidentReportsTable)
+      .where(eq(incidentReportsTable.caseId, caseId))
+      .limit(1),
+  ]);
+
+  res.json({
+    case: caseRow,
+    artifacts,
+    steps,
+    logs,
+    report: report ?? null,
+  });
+});
+
+router.delete("/cases/:caseId", async (req, res) => {
+  const { caseId } = req.params;
+  const result = await db
+    .delete(casesTable)
+    .where(eq(casesTable.id, caseId))
+    .returning({ id: casesTable.id });
+  if (result.length === 0) {
+    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
+  }
+  res.status(204).send();
+});
+
+router.post("/cases/:caseId/artifacts", async (req, res) => {
+  const { caseId } = req.params;
+  const body = CreateArtifactBody.parse(req.body);
+
+  const sizeBytes = utf8ByteLength(body.content);
+  if (sizeBytes > MAX_ARTIFACT_BYTES) {
+    throw new PayloadTooLargeError(
+      "artifact_too_large",
+      `Artifact content (${sizeBytes} bytes) exceeds the 10 MB limit`,
+      { sizeBytes, maxBytes: MAX_ARTIFACT_BYTES },
+    );
+  }
+
+  if (body.kind === "mcp_endpoint") {
+    try {
+      // eslint-disable-next-line no-new
+      new URL(body.content);
+    } catch {
+      throw new BadRequestError(
+        "invalid_mcp_endpoint",
+        "MCP endpoint content must be a valid URL",
+      );
+    }
+  }
+
+  const [parent] = await db
+    .select({ id: casesTable.id })
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId));
+  if (!parent) {
+    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
+  }
+
+  const [created] = await db
+    .insert(caseArtifactsTable)
+    .values({
+      caseId,
+      kind: body.kind,
+      filename: body.filename ?? null,
+      content: body.content,
+      sha256Hash: sha256Hex(body.content),
+      sizeBytes,
+    })
+    .returning({
+      id: caseArtifactsTable.id,
+      caseId: caseArtifactsTable.caseId,
+      kind: caseArtifactsTable.kind,
+      filename: caseArtifactsTable.filename,
+      sha256Hash: caseArtifactsTable.sha256Hash,
+      sizeBytes: caseArtifactsTable.sizeBytes,
+      createdAt: caseArtifactsTable.createdAt,
+    });
+
+  res.status(201).json(created);
+});
+
+router.get("/cases/:caseId/artifacts", async (req, res) => {
+  const { caseId } = req.params;
+  const [parent] = await db
+    .select({ id: casesTable.id })
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId));
+  if (!parent) {
+    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
+  }
+
+  const rows = await db
+    .select({
+      id: caseArtifactsTable.id,
+      caseId: caseArtifactsTable.caseId,
+      kind: caseArtifactsTable.kind,
+      filename: caseArtifactsTable.filename,
+      sha256Hash: caseArtifactsTable.sha256Hash,
+      sizeBytes: caseArtifactsTable.sizeBytes,
+      createdAt: caseArtifactsTable.createdAt,
+    })
+    .from(caseArtifactsTable)
+    .where(eq(caseArtifactsTable.caseId, caseId))
+    .orderBy(asc(caseArtifactsTable.createdAt));
+
+  res.json(rows);
+});
+
+router.get("/cases/:caseId/steps", async (req, res) => {
+  const { caseId } = req.params;
+  const [parent] = await db
+    .select({ id: casesTable.id })
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId));
+  if (!parent) {
+    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
+  }
+
+  const rows = await db
+    .select()
+    .from(analysisStepsTable)
+    .where(eq(analysisStepsTable.caseId, caseId))
+    .orderBy(asc(analysisStepsTable.stepNumber));
+
+  res.json(rows);
+});
+
+router.get("/cases/:caseId/logs", async (req, res) => {
+  const { caseId } = req.params;
+  const [parent] = await db
+    .select({ id: casesTable.id })
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId));
+  if (!parent) {
+    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
+  }
+
+  const rows = await db
+    .select()
+    .from(executionLogsTable)
+    .where(eq(executionLogsTable.caseId, caseId))
+    .orderBy(asc(executionLogsTable.startedAt));
+
+  res.json(rows);
+});
+
+router.get("/cases/:caseId/report", async (req, res) => {
+  const { caseId } = req.params;
+  const [report] = await db
+    .select()
+    .from(incidentReportsTable)
+    .where(eq(incidentReportsTable.caseId, caseId));
+  if (!report) {
+    throw new NotFoundError(
+      "report_not_found",
+      `No incident report exists for case ${caseId}`,
+    );
+  }
+  res.json(report);
+});
+
+export default router;
