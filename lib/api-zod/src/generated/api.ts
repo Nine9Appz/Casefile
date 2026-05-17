@@ -381,6 +381,23 @@ export const GetCaseChainOfCustodyResponse = zod.object({
 });
 
 /**
+ * Streams Server-Sent Events as the agent reasons, calls tools, records
+findings, and finalizes a report.
+
+Event types: `started`, `iteration`, `thinking`, `tool_call`,
+`tool_result`, `finding`, `finalized`, `tokens`, `error`, `done`.
+
+The response is a long-lived `text/event-stream` and cannot be
+modelled by a normal JSON Orval client — consume it with a raw
+`fetch` + `ReadableStream` reader.
+
+ * @summary Run the autonomous agent against a case (SSE stream)
+ */
+export const InvestigateCaseParams = zod.object({
+  caseId: zod.coerce.string().uuid(),
+});
+
+/**
  * @summary Get the incident report for a case
  */
 export const GetCaseReportParams = zod.object({

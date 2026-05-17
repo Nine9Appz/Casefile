@@ -22,6 +22,8 @@ tags:
     description: Final incident reports
   - name: integrity
     description: Evidence chain of custody and integrity proofs
+  - name: agent
+    description: Autonomous investigation agent (SSE streaming)
 paths:
   /healthz:
     get:
@@ -238,6 +240,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChainOfCustody"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cases/{caseId}/investigate:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: investigateCase
+      tags: [agent]
+      summary: Run the autonomous agent against a case (SSE stream)
+      description: |
+        Streams Server-Sent Events as the agent reasons, calls tools, records
+        findings, and finalizes a report.
+
+        Event types: `started`, `iteration`, `thinking`, `tool_call`,
+        `tool_result`, `finding`, `finalized`, `tokens`, `error`, `done`.
+
+        The response is a long-lived `text/event-stream` and cannot be
+        modelled by a normal JSON Orval client — consume it with a raw
+        `fetch` + `ReadableStream` reader.
+      responses:
+        "200":
+          description: SSE stream of agent events
+          content:
+            text/event-stream:
+              schema:
+                type: string
         "404":
           $ref: "#/components/responses/NotFound"
 

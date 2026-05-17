@@ -17,6 +17,9 @@
     },
     {
       "path": "./lib/sift-tools"
+    },
+    {
+      "path": "./lib/sift-agent"
     }
   ]
 }

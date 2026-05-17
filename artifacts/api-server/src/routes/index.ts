@@ -3,6 +3,7 @@ import artifactsRouter from "./artifacts";
 import casesRouter from "./cases";
 import healthRouter from "./health";
 import integrityRouter from "./integrity";
+import investigateRouter from "./investigate";
 import stepsRouter from "./steps";
 
 const router: IRouter = Router();
@@ -12,5 +13,6 @@ router.use(casesRouter);
 router.use(artifactsRouter);
 router.use(stepsRouter);
 router.use(integrityRouter);
+router.use(investigateRouter);
 
 export default router;

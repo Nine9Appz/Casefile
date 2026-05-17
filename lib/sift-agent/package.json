@@ -1,0 +1,21 @@
+{
+  "name": "@workspace/sift-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "@workspace/integrations-openai-ai-server": "workspace:*",
+    "@workspace/sift-tools": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "openai": "^6.27.0",
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}

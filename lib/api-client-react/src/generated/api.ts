@@ -1061,6 +1061,100 @@ export function useGetCaseChainOfCustody<
 }
 
 /**
+ * Streams Server-Sent Events as the agent reasons, calls tools, records
+findings, and finalizes a report.
+
+Event types: `started`, `iteration`, `thinking`, `tool_call`,
+`tool_result`, `finding`, `finalized`, `tokens`, `error`, `done`.
+
+The response is a long-lived `text/event-stream` and cannot be
+modelled by a normal JSON Orval client — consume it with a raw
+`fetch` + `ReadableStream` reader.
+
+ * @summary Run the autonomous agent against a case (SSE stream)
+ */
+export const getInvestigateCaseUrl = (caseId: string) => {
+  return `/api/cases/${caseId}/investigate`;
+};
+
+export const investigateCase = async (
+  caseId: string,
+  options?: RequestInit,
+): Promise<string> => {
+  return customFetch<string>(getInvestigateCaseUrl(caseId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getInvestigateCaseMutationOptions = <
+  TError = ErrorType<NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof investigateCase>>,
+    TError,
+    { caseId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof investigateCase>>,
+  TError,
+  { caseId: string },
+  TContext
+> => {
+  const mutationKey = ["investigateCase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof investigateCase>>,
+    { caseId: string }
+  > = (props) => {
+    const { caseId } = props ?? {};
+
+    return investigateCase(caseId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InvestigateCaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof investigateCase>>
+>;
+
+export type InvestigateCaseMutationError = ErrorType<NotFoundResponse>;
+
+/**
+ * @summary Run the autonomous agent against a case (SSE stream)
+ */
+export const useInvestigateCase = <
+  TError = ErrorType<NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof investigateCase>>,
+    TError,
+    { caseId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof investigateCase>>,
+  TError,
+  { caseId: string },
+  TContext
+> => {
+  return useMutation(getInvestigateCaseMutationOptions(options));
+};
+
+/**
  * @summary Get the incident report for a case
  */
 export const getGetCaseReportUrl = (caseId: string) => {
