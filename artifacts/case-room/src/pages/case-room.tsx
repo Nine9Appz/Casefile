@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Terminal, ShieldAlert, ArrowLeft, Play, SquareSquare, FileText, Activity, Database, Lock, AlertTriangle, CheckCircle2, ChevronRight, Upload, XCircle } from "lucide-react";
+import { Terminal, ShieldAlert, ArrowLeft, Play, SquareSquare, FileText, Activity, Database, Lock, AlertTriangle, CheckCircle2, ChevronRight, Upload, XCircle, ArrowDown, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 
 export default function CaseRoom() {
@@ -48,13 +48,33 @@ export default function CaseRoom() {
 
   const stream = useInvestigationStream(caseId);
 
-  // Auto-scroll feed
+  // Feed scroll lock: only auto-follow when the user is already at the bottom.
+  const feedScrollRef = useRef<HTMLDivElement>(null);
   const feedEndRef = useRef<HTMLDivElement>(null);
+  const [autoFollow, setAutoFollow] = useState(true);
+  const [expandedThinking, setExpandedThinking] = useState<Record<number, boolean>>({});
+
+  const handleFeedScroll = () => {
+    const el = feedScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceFromBottom < 40;
+    setAutoFollow(atBottom);
+  };
+
   useEffect(() => {
-    if (stream.events.length > 0) {
-      feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [stream.events]);
+    if (!autoFollow) return;
+    feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [stream.events, autoFollow]);
+
+  const jumpToLatest = () => {
+    setAutoFollow(true);
+    feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
+
+  const toggleThinking = (index: number) => {
+    setExpandedThinking((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
 
   const createArtifact = useCreateArtifact();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -278,7 +298,13 @@ export default function CaseRoom() {
           <div className="h-8 border-b border-border bg-card/30 flex items-center px-4 shrink-0">
             <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center"><Terminal size={12} className="mr-2"/> Terminal / Agent Feed</span>
           </div>
-          <ScrollArea className="flex-1 p-4 font-mono text-xs">
+          <div className="flex-1 relative overflow-hidden">
+            <div
+              ref={feedScrollRef}
+              onScroll={handleFeedScroll}
+              className="absolute inset-0 overflow-y-auto p-4 font-mono text-xs"
+              data-testid="feed-scroll"
+            >
             {stream.events.length === 0 && !stream.isStreaming ? (
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
                 <Terminal size={48} className="mb-4" />
@@ -296,11 +322,40 @@ export default function CaseRoom() {
                     {ev.type === 'iteration' && (
                       <div className="text-amber-400/80 mb-1 mt-4">--- Iteration {ev.iteration} ---</div>
                     )}
-                    {ev.type === 'thinking' && (
-                      <div className="text-muted-foreground pl-4 border-l-2 border-border italic whitespace-pre-wrap">
-                        {ev.text}
-                      </div>
-                    )}
+                    {ev.type === 'thinking' && (() => {
+                      const isExpanded = expandedThinking[i] ?? false;
+                      const lines = ev.text.split("\n");
+                      const isLong = lines.length > 3 || ev.text.length > 220;
+                      const preview = isLong
+                        ? (lines.slice(0, 2).join("\n").slice(0, 220) + "…")
+                        : ev.text;
+                      return (
+                        <div className="pl-4 border-l-2 border-border">
+                          <button
+                            type="button"
+                            onClick={() => isLong && toggleThinking(i)}
+                            disabled={!isLong}
+                            className={`flex items-start gap-1 text-left w-full ${isLong ? "hover:text-foreground cursor-pointer" : "cursor-default"} text-muted-foreground`}
+                            data-testid={`thinking-toggle-${i}`}
+                          >
+                            {isLong && (
+                              <ChevronDown
+                                size={11}
+                                className={`mt-0.5 shrink-0 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
+                              />
+                            )}
+                            <span className="italic whitespace-pre-wrap flex-1">
+                              {isExpanded || !isLong ? ev.text : preview}
+                            </span>
+                          </button>
+                          {isLong && (
+                            <div className="text-[10px] uppercase tracking-widest text-muted-foreground/60 mt-1 ml-3">
+                              {isExpanded ? "click to collapse" : `thinking · ${lines.length} lines · click to expand`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {ev.type === 'tool_call' && (
                       <div className="text-primary mt-2">
                         <span className="font-bold">&gt; EXEC: {ev.name}</span>
@@ -357,7 +412,18 @@ export default function CaseRoom() {
                 <div ref={feedEndRef} />
               </div>
             )}
-          </ScrollArea>
+            </div>
+            {!autoFollow && stream.events.length > 0 && (
+              <button
+                type="button"
+                onClick={jumpToLatest}
+                data-testid="button-jump-to-latest"
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground font-mono text-[10px] uppercase tracking-widest shadow-lg hover:bg-primary/90 transition-colors border border-primary/40"
+              >
+                <ArrowDown size={12} /> Jump to latest
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Right Panel: Intelligence / Report */}

@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useListCases, useCreateCase, getListCasesQueryKey } from "@workspace/api-client-react";
+import {
+  useListCases,
+  useCreateCase,
+  getListCasesQueryKey,
+  createArtifact,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +18,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { Terminal, ShieldAlert, Plus, ArrowRight } from "lucide-react";
+import { Terminal, ShieldAlert, Plus, ArrowRight, Sparkles, FileStack } from "lucide-react";
+import { SAMPLE_CASES, type SampleCase } from "@/lib/sample-cases";
 
 export default function CaseList() {
   const { data: cases, isLoading } = useListCases();
@@ -23,6 +29,8 @@ export default function CaseList() {
   const createCase = useCreateCase();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
+  const [sampleError, setSampleError] = useState<string | null>(null);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +46,31 @@ export default function CaseList() {
         },
       }
     );
+  };
+
+  const handleLoadSample = async (sample: SampleCase) => {
+    if (loadingSampleId) return;
+    setSampleError(null);
+    setLoadingSampleId(sample.id);
+    try {
+      const newCase = await createCase.mutateAsync({
+        data: { title: sample.title, description: sample.description },
+      });
+      for (const artifact of sample.artifacts) {
+        await createArtifact(newCase.id, {
+          kind: artifact.kind,
+          filename: artifact.filename,
+          content: artifact.content,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: getListCasesQueryKey() });
+      setLocation(`/cases/${newCase.id}`);
+    } catch (err) {
+      const e = err as { message?: string };
+      setSampleError(e.message ?? "Could not load sample case.");
+    } finally {
+      setLoadingSampleId(null);
+    }
   };
 
   return (
@@ -97,7 +130,78 @@ export default function CaseList() {
         </Dialog>
       </header>
 
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-8">
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-primary" />
+              <h2 className="font-mono text-xs uppercase tracking-widest text-primary">
+                Load Sample Case
+              </h2>
+            </div>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+              Pre-loaded incident scenarios · one-click
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground font-mono mb-3">
+            New here? Skip the upload step — load a canonical incident with
+            real-looking logs already attached, then hit{" "}
+            <span className="text-primary">Run Investigation</span>.
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {SAMPLE_CASES.map((sample) => {
+              const isLoading = loadingSampleId === sample.id;
+              const isDisabled = loadingSampleId !== null;
+              return (
+                <button
+                  key={sample.id}
+                  type="button"
+                  onClick={() => handleLoadSample(sample)}
+                  disabled={isDisabled}
+                  data-testid={`button-load-sample-${sample.id}`}
+                  className="text-left border border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/60 transition-colors rounded p-4 cursor-pointer disabled:opacity-50 disabled:cursor-wait flex flex-col gap-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary/80">
+                      {sample.scenario}
+                    </span>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                      <FileStack size={10} /> {sample.artifacts.length} file
+                      {sample.artifacts.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <h3 className="font-semibold text-foreground tracking-tight text-sm leading-snug">
+                    {sample.shortLabel}
+                  </h3>
+                  <p className="text-xs text-muted-foreground font-mono line-clamp-3 flex-1">
+                    {sample.description}
+                  </p>
+                  <div className="flex items-center justify-end text-[10px] font-mono uppercase tracking-widest text-primary mt-1">
+                    {isLoading ? (
+                      <span className="animate-pulse">Loading…</span>
+                    ) : (
+                      <>
+                        Load &amp; open <ArrowRight size={12} className="ml-1" />
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {sampleError && (
+            <div className="mt-3 text-xs font-mono text-destructive border border-destructive/30 bg-destructive/10 rounded p-2">
+              {sampleError}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+              Active Investigations
+            </h2>
+          </div>
         {isLoading ? (
           <div className="flex items-center justify-center h-64 text-primary font-mono animate-pulse">
             <Terminal className="mr-2" /> Initializing datalinks...
@@ -140,6 +244,7 @@ export default function CaseList() {
             ))}
           </div>
         )}
+        </section>
       </main>
     </div>
   );
