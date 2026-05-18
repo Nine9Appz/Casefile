@@ -1,5 +1,6 @@
 import { casesTable, db } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { ArtifactIntegrityError } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type {
   ChatCompletionMessageParam,
@@ -247,15 +248,30 @@ export async function* runInvestigation(
       };
 
       let dispatch: DispatchResult;
+      let spoliationHalt = false;
       try {
         dispatch = await dispatchToolCall(tc.function.name, argsRaw, {
           caseId,
         });
       } catch (err) {
-        dispatch = {
-          kind: "error",
-          message: err instanceof Error ? err.message : String(err),
-        };
+        // ArtifactIntegrityError is a non-recoverable spoliation signal: the
+        // stored hash did not match the recomputed hash. The investigation
+        // MUST halt — anything else would be analyzing tampered evidence.
+        if (err instanceof ArtifactIntegrityError) {
+          spoliationHalt = true;
+          dispatch = {
+            kind: "error",
+            message:
+              `SPOLIATION: artifact ${err.artifactId} failed integrity check ` +
+              `(stored ${err.storedHash.slice(0, 12)}…, computed ${err.computedHash.slice(0, 12)}…). ` +
+              `Halting investigation.`,
+          };
+        } else {
+          dispatch = {
+            kind: "error",
+            message: err instanceof Error ? err.message : String(err),
+          };
+        }
       }
 
       // Build the tool message content the LLM will see in the next turn.
@@ -334,7 +350,22 @@ export async function* runInvestigation(
         tool_call_id: tc.id,
         content: truncateForLlm(toolResultContent),
       });
+
+      if (spoliationHalt) {
+        yield {
+          type: "error",
+          message: dispatch.kind === "error" ? dispatch.message : "spoliation",
+          fatal: true,
+        };
+        stopReason = { type: "done", reason: "error" };
+        // Break out of the tool-calls loop; outer loop check below will exit.
+        finalized = false;
+        iteration = maxIterations + 1;
+        break;
+      }
     }
+
+    if (iteration > maxIterations) break;
 
     if (finalized) {
       stopReason = { type: "done", reason: "finalized" };

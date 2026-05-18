@@ -1,10 +1,27 @@
 import { runInvestigation } from "@workspace/sift-agent";
+import { db, casesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
 router.post("/cases/:caseId/investigate", async (req, res) => {
   const { caseId } = req.params;
+
+  // Preflight: the OpenAPI spec advertises 404 for unknown cases, so the
+  // existence check must happen BEFORE we flip the response into SSE mode.
+  // Once we've sent SSE headers we can no longer return a JSON 404.
+  const [caseRow] = await db
+    .select({ id: casesTable.id })
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId));
+  if (!caseRow) {
+    res.status(404).json({
+      error: "not_found",
+      message: `Case ${caseId} not found`,
+    });
+    return;
+  }
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");

@@ -1,3 +1,5 @@
+import { promises as dns } from "node:dns";
+import { isIP } from "node:net";
 import { z } from "zod";
 import type { ToolDescriptor } from "./types.js";
 
@@ -56,10 +58,60 @@ function isPrivateOrInvalidHost(hostname: string): string | null {
   return null;
 }
 
+function isPrivateIPv4(ip: string): boolean {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
+    return false;
+  }
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  if (a >= 224) return true; // multicast + reserved
+  return false;
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const lower = ip.toLowerCase();
+  if (lower === "::1" || lower === "::") return true;
+  if (lower.startsWith("fe80:")) return true; // link-local
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // ULA
+  if (lower.startsWith("::ffff:")) {
+    // IPv4-mapped IPv6 — check the embedded v4
+    const v4 = lower.slice(7);
+    if (isIP(v4) === 4 && isPrivateIPv4(v4)) return true;
+  }
+  return false;
+}
+
+async function resolvesToPrivate(hostname: string): Promise<string | null> {
+  // Skip DNS if hostname is already an IP literal (covered by isPrivateOrInvalidHost)
+  if (isIP(hostname) !== 0) return null;
+  let addresses: { address: string; family: number }[];
+  try {
+    addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+  } catch (err) {
+    return `DNS lookup failed for '${hostname}': ${err instanceof Error ? err.message : String(err)}`;
+  }
+  for (const { address, family } of addresses) {
+    if (family === 4 && isPrivateIPv4(address)) {
+      return `host '${hostname}' resolves to private/loopback IPv4 ${address}`;
+    }
+    if (family === 6 && isPrivateIPv6(address)) {
+      return `host '${hostname}' resolves to private/loopback IPv6 ${address}`;
+    }
+  }
+  return null;
+}
+
 export const mcpFetcher: ToolDescriptor<typeof McpFetcherInput, typeof McpFetcherOutput> = {
   name: "mcpFetcher",
   description:
-    "Fetches an external HTTP(S) URL and returns the response body as text along with status code, content-type, and byte length. Has a hard timeout and response-size cap. Refuses requests to private/loopback hostnames or IP literals (including decimal/hex-encoded IPv4 and IPv6 loopback/ULA/link-local forms) to prevent obvious SSRF. NOTE: hostname is not DNS-resolved, so a public DNS name pointing at an internal IP will not be blocked here. This is the only tool in the suite that touches the network.",
+    "Fetches an external HTTP(S) URL and returns the response body as text along with status code, content-type, and byte length. Has a hard timeout and response-size cap. Refuses requests to private/loopback hostnames or IP literals (decimal/hex-encoded IPv4, IPv6 loopback/ULA/link-local), and additionally resolves the hostname via DNS and refuses any name that resolves to a private/loopback/CGNAT/multicast address (SSRF defense in depth). This is the only tool in the suite that touches the network.",
   inputSchema: McpFetcherInput,
   outputSchema: McpFetcherOutput,
   run: async ({ url, method, headers, body, timeoutMs, maxBytes }) => {
@@ -67,9 +119,13 @@ export const mcpFetcher: ToolDescriptor<typeof McpFetcherInput, typeof McpFetche
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new Error(`Refusing non-http(s) scheme '${parsed.protocol}'`);
     }
-    const reason = isPrivateOrInvalidHost(parsed.hostname);
-    if (reason) {
-      throw new Error(`Refusing to fetch ${reason} — SSRF protection`);
+    const literalReason = isPrivateOrInvalidHost(parsed.hostname);
+    if (literalReason) {
+      throw new Error(`Refusing to fetch ${literalReason} — SSRF protection`);
+    }
+    const dnsReason = await resolvesToPrivate(parsed.hostname);
+    if (dnsReason) {
+      throw new Error(`Refusing to fetch ${dnsReason} — SSRF protection`);
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

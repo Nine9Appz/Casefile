@@ -2,6 +2,7 @@ import {
   db,
   executionLogsTable,
   loadVerifiedArtifact,
+  ArtifactIntegrityError,
   type VerifiedArtifact,
 } from "@workspace/db";
 import { invokeTool, type ToolName } from "@workspace/sift-tools";
@@ -81,6 +82,33 @@ export async function runToolOnArtifact(
     }
   } catch (err) {
     errorMessage = err instanceof Error ? err.message : String(err);
+    // Persist a log row before re-throwing so spoliation is auditable, then
+    // surface the integrity violation as a fatal halt — the agent must NOT
+    // be allowed to "recover" from tampered evidence.
+    if (err instanceof ArtifactIntegrityError) {
+      const endedAt = new Date();
+      await db.insert(executionLogsTable).values({
+        caseId,
+        analysisStepId: analysisStepId ?? null,
+        artifactId,
+        toolName,
+        input: {
+          artifactId,
+          sha256: null,
+          extraInput: extraInput ?? {},
+        },
+        output: {
+          error: errorMessage,
+          spoliation: true,
+          storedHash: err.storedHash,
+          computedHash: err.computedHash,
+        },
+        startedAt,
+        endedAt,
+        error: errorMessage,
+      });
+      throw err;
+    }
   }
   const endedAt = new Date();
 
