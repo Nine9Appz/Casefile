@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import {
   useGetCase,
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -26,8 +27,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Terminal, ShieldAlert, ArrowLeft, Play, SquareSquare, FileText, Activity, Database, Lock, AlertTriangle, CheckCircle2, ChevronRight, Upload, XCircle, ArrowDown, ChevronDown } from "lucide-react";
+import { Terminal, ArrowLeft, Play, SquareSquare, FileText, Activity, Database, Lock, CheckCircle2, ChevronRight, Upload, XCircle, ArrowDown, Sparkles, Cpu } from "lucide-react";
 import { format } from "date-fns";
+import { ReasoningCard } from "@/components/reasoning-card";
+import { LiveActivityCard } from "@/components/live-activity";
+import { ExecLogPanel } from "@/components/exec-log-panel";
 
 export default function CaseRoom() {
   const params = useParams();
@@ -48,11 +52,12 @@ export default function CaseRoom() {
 
   const stream = useInvestigationStream(caseId);
 
+  const [trainingMode, setTrainingMode] = useState(false);
+
   // Feed scroll lock: only auto-follow when the user is already at the bottom.
   const feedScrollRef = useRef<HTMLDivElement>(null);
   const feedEndRef = useRef<HTMLDivElement>(null);
   const [autoFollow, setAutoFollow] = useState(true);
-  const [expandedThinking, setExpandedThinking] = useState<Record<number, boolean>>({});
 
   const handleFeedScroll = () => {
     const el = feedScrollRef.current;
@@ -62,18 +67,64 @@ export default function CaseRoom() {
     setAutoFollow(atBottom);
   };
 
+  const steps = useMemo(
+    () =>
+      [...(caseDetail?.steps ?? [])].sort((a, b) => a.stepNumber - b.stepNumber),
+    [caseDetail?.steps],
+  );
+  const logs = caseDetail?.logs ?? [];
+
+  // Live activity = streamed events since the last `finding` event (i.e. since
+  // the agent last committed a step via record_finding). These haven't been
+  // persisted to analysis_steps yet, so they don't have a reasoning card.
+  const liveSlice = useMemo(() => {
+    let lastFindingIdx = -1;
+    let lastIteration: number | null = null;
+    for (let i = 0; i < stream.events.length; i++) {
+      const e = stream.events[i];
+      if (e.type === "finding") lastFindingIdx = i;
+      if (e.type === "iteration") lastIteration = e.iteration;
+    }
+    const tail = stream.events.slice(lastFindingIdx + 1).filter((e) =>
+      e.type === "thinking" || e.type === "tool_call" || e.type === "tool_result" || e.type === "error",
+    );
+    return { events: tail, iteration: lastIteration };
+  }, [stream.events]);
+
+  const terminalEvent = useMemo(() => {
+    for (let i = stream.events.length - 1; i >= 0; i--) {
+      const e = stream.events[i];
+      if (e.type === "done" || e.type === "finalized") return e;
+    }
+    return null;
+  }, [stream.events]);
+
+  // Aggregate token usage from `tokens` events for header readout (previously
+  // shown inline in the terminal feed; now a compact running total).
+  const tokenTotals = useMemo(() => {
+    let prompt = 0;
+    let completion = 0;
+    let total = 0;
+    for (const e of stream.events) {
+      if (e.type === "tokens") {
+        prompt += e.promptTokens;
+        completion += e.completionTokens;
+        total += e.total;
+      }
+    }
+    return { prompt, completion, total };
+  }, [stream.events]);
+
   useEffect(() => {
     if (!autoFollow) return;
     feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [stream.events, autoFollow]);
+    // Include stream.events.length so terminal banners (finalized/done) also
+    // trigger auto-follow when the user is at the bottom.
+  }, [steps.length, liveSlice.events.length, stream.events.length, autoFollow]);
 
   const jumpToLatest = () => {
     setAutoFollow(true);
     feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  };
-
-  const toggleThinking = (index: number) => {
-    setExpandedThinking((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   const createArtifact = useCreateArtifact();
@@ -171,6 +222,22 @@ export default function CaseRoom() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <label
+            htmlFor="training-mode-switch"
+            className="flex items-center gap-2 cursor-pointer select-none px-2 py-1 rounded hover:bg-card/60 transition-colors"
+            data-testid="training-mode-label"
+          >
+            <Sparkles size={12} className={trainingMode ? "text-primary" : "text-muted-foreground"} />
+            <span className={`font-mono text-[10px] uppercase tracking-widest ${trainingMode ? "text-primary" : "text-muted-foreground"}`}>
+              Training
+            </span>
+            <Switch
+              id="training-mode-switch"
+              data-testid="switch-training-mode"
+              checked={trainingMode}
+              onCheckedChange={setTrainingMode}
+            />
+          </label>
           {stream.isStreaming && (
             <div className="flex items-center gap-2 px-3 py-1 bg-amber-400/10 border border-amber-400/20 rounded font-mono text-[10px] text-amber-400 uppercase tracking-widest">
               <Activity size={12} className="animate-pulse" />
@@ -293,127 +360,83 @@ export default function CaseRoom() {
           </ScrollArea>
         </div>
 
-        {/* Center Panel: Live Feed */}
+        {/* Center Panel: Reasoning Cards */}
         <div className="flex-1 flex flex-col min-w-0 border-r border-border bg-[#0a0a0c]">
-          <div className="h-8 border-b border-border bg-card/30 flex items-center px-4 shrink-0">
-            <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center"><Terminal size={12} className="mr-2"/> Terminal / Agent Feed</span>
+          <div className="h-8 border-b border-border bg-card/30 flex items-center justify-between px-4 shrink-0">
+            <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center">
+              <Terminal size={12} className="mr-2" /> Reasoning Trace
+            </span>
+            <span
+              data-testid="reasoning-trace-meta"
+              className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest"
+            >
+              {steps.length} step{steps.length === 1 ? "" : "s"}
+              {tokenTotals.total > 0 && ` · ${tokenTotals.total} tok`}
+              {liveSlice.events.length > 0 && stream.isStreaming ? " · live" : ""}
+            </span>
           </div>
           <div className="flex-1 relative overflow-hidden">
             <div
               ref={feedScrollRef}
               onScroll={handleFeedScroll}
-              className="absolute inset-0 overflow-y-auto p-4 font-mono text-xs"
+              className="absolute inset-0 overflow-y-auto p-4"
               data-testid="feed-scroll"
             >
-            {stream.events.length === 0 && !stream.isStreaming ? (
+            {steps.length === 0 && liveSlice.events.length === 0 && !stream.isStreaming ? (
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
                 <Terminal size={48} className="mb-4" />
-                <p className="uppercase tracking-widest">Awaiting execution command</p>
+                <p className="font-mono uppercase tracking-widest text-xs">Awaiting execution command</p>
               </div>
             ) : (
               <div className="space-y-3 pb-8">
-                {stream.events.map((ev, i) => (
-                  <div key={i} className="leading-relaxed">
-                    {ev.type === 'started' && (
-                      <div className="text-primary/80 mb-1">
-                        &gt; SESSION INIT // model={ev.model} // iter_limit={ev.iterationLimit}
+                {trainingMode && (
+                  <div
+                    data-testid="training-mode-intro"
+                    className="rounded border border-primary/30 bg-primary/[0.04] p-3 flex gap-2 text-[11px] leading-relaxed text-foreground/90"
+                  >
+                    <Sparkles size={12} className="text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <div className="font-mono uppercase tracking-widest text-primary text-[10px] mb-1">
+                        Training mode
                       </div>
-                    )}
-                    {ev.type === 'iteration' && (
-                      <div className="text-amber-400/80 mb-1 mt-4">--- Iteration {ev.iteration} ---</div>
-                    )}
-                    {ev.type === 'thinking' && (() => {
-                      const isExpanded = expandedThinking[i] ?? false;
-                      const lines = ev.text.split("\n");
-                      const isLong = lines.length > 3 || ev.text.length > 220;
-                      const preview = isLong
-                        ? (lines.slice(0, 2).join("\n").slice(0, 220) + "…")
-                        : ev.text;
-                      return (
-                        <div className="pl-4 border-l-2 border-border">
-                          <button
-                            type="button"
-                            onClick={() => isLong && toggleThinking(i)}
-                            disabled={!isLong}
-                            className={`flex items-start gap-1 text-left w-full ${isLong ? "hover:text-foreground cursor-pointer" : "cursor-default"} text-muted-foreground`}
-                            data-testid={`thinking-toggle-${i}`}
-                          >
-                            {isLong && (
-                              <ChevronDown
-                                size={11}
-                                className={`mt-0.5 shrink-0 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
-                              />
-                            )}
-                            <span className="italic whitespace-pre-wrap flex-1">
-                              {isExpanded || !isLong ? ev.text : preview}
-                            </span>
-                          </button>
-                          {isLong && (
-                            <div className="text-[10px] uppercase tracking-widest text-muted-foreground/60 mt-1 ml-3">
-                              {isExpanded ? "click to collapse" : `thinking · ${lines.length} lines · click to expand`}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                    {ev.type === 'tool_call' && (
-                      <div className="text-primary mt-2">
-                        <span className="font-bold">&gt; EXEC: {ev.name}</span>
-                        <div className="bg-primary/5 p-2 rounded mt-1 border border-primary/20 text-primary/80 overflow-x-auto whitespace-pre-wrap">
-                          {JSON.stringify(ev.args, null, 2)}
-                        </div>
-                      </div>
-                    )}
-                    {ev.type === 'tool_result' && (
-                      <div className={`mt-1 ${ev.ok ? 'text-green-400' : 'text-destructive'}`}>
-                        <span className="opacity-70">&lt; RESULT ({ev.name}) {ev.ok ? 'OK' : 'FAIL'}:</span>
-                        <div className="bg-black/50 p-2 rounded mt-1 border border-border overflow-x-auto whitespace-pre-wrap opacity-80">
-                          {ev.summary}
-                        </div>
-                        {ev.verifiedHash && (
-                          <div className="text-[10px] font-mono text-muted-foreground mt-1 flex items-center">
-                            <Lock size={10} className="mr-1" /> sha256: {ev.verifiedHash.substring(0, 16)}…
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {ev.type === 'finding' && (
-                      <div className="text-fuchsia-400 mt-2 p-2 border border-fuchsia-400/30 bg-fuchsia-400/5 rounded">
-                        <span className="font-bold uppercase tracking-wide">! FINDING (step {ev.step} / {ev.phase})</span>
-                        <div className="mt-1 opacity-90 whitespace-pre-wrap font-mono text-foreground/90">{ev.found}</div>
-                      </div>
-                    )}
-                    {ev.type === 'tokens' && (
-                      <div className="text-muted-foreground text-[10px] uppercase tracking-widest mt-1">
-                        tokens: prompt={ev.promptTokens} completion={ev.completionTokens} total={ev.total}
-                      </div>
-                    )}
-                    {ev.type === 'finalized' && (
-                      <div className="text-primary mt-4 font-bold uppercase tracking-widest flex items-center">
-                        <CheckCircle2 size={14} className="mr-2"/> Report finalized
-                      </div>
-                    )}
-                    {ev.type === 'error' && (
-                      <div className="text-destructive mt-2 p-2 border border-destructive/30 bg-destructive/10 rounded flex items-start gap-2">
-                        <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                        <span>{ev.message}{ev.fatal ? ' (fatal)' : ''}</span>
-                      </div>
-                    )}
-                    {ev.type === 'done' && (
-                      <div className="text-green-400 mt-4 font-bold uppercase tracking-widest flex items-center">
-                        <CheckCircle2 size={14} className="mr-2"/> Stream Terminated — {ev.reason}
-                      </div>
-                    )}
+                      Each card is one persisted reasoning step. Read in order: <em>rationale</em> (why this step), <em>expected</em> (hypothesis), <em>found</em> (what the tool returned — must cite concrete values), <em>next</em> (where this leads). Phases progress triage → deep analysis → synthesis, with self-correction whenever evidence contradicts a prior step.
+                    </div>
                   </div>
+                )}
+                {steps.map((step) => (
+                  <ReasoningCard
+                    key={step.id}
+                    step={step}
+                    trainingMode={trainingMode}
+                  />
                 ))}
-                {stream.isStreaming && (
-                  <div className="text-primary animate-pulse">_</div>
+                {stream.isStreaming && liveSlice.events.length > 0 && (
+                  <LiveActivityCard
+                    events={liveSlice.events}
+                    iteration={liveSlice.iteration}
+                  />
+                )}
+                {terminalEvent?.type === "finalized" && (
+                  <div
+                    data-testid="banner-finalized"
+                    className="rounded border border-primary/40 bg-primary/[0.06] px-3 py-2 font-mono text-xs text-primary uppercase tracking-widest flex items-center"
+                  >
+                    <CheckCircle2 size={14} className="mr-2" /> Report finalized
+                  </div>
+                )}
+                {terminalEvent?.type === "done" && (
+                  <div
+                    data-testid="banner-done"
+                    className="rounded border border-emerald-400/40 bg-emerald-400/[0.06] px-3 py-2 font-mono text-xs text-emerald-300 uppercase tracking-widest flex items-center"
+                  >
+                    <CheckCircle2 size={14} className="mr-2" /> Stream terminated — {terminalEvent.reason}
+                  </div>
                 )}
                 <div ref={feedEndRef} />
               </div>
             )}
             </div>
-            {!autoFollow && stream.events.length > 0 && (
+            {!autoFollow && (steps.length > 0 || liveSlice.events.length > 0) && (
               <button
                 type="button"
                 onClick={jumpToLatest}
@@ -426,13 +449,17 @@ export default function CaseRoom() {
           </div>
         </div>
 
+
         {/* Right Panel: Intelligence / Report */}
         <div className="w-[300px] lg:w-[400px] bg-sidebar flex flex-col shrink-0">
           <Tabs defaultValue="report" className="flex-1 flex flex-col">
             <div className="h-8 border-b border-border bg-card/30 flex items-center px-2 shrink-0">
                <TabsList className="h-6 bg-transparent p-0 gap-4">
-                 <TabsTrigger value="report" className="text-[10px] font-mono uppercase tracking-widest data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-0">Report</TabsTrigger>
-                 <TabsTrigger value="custody" className="text-[10px] font-mono uppercase tracking-widest data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-0">Custody</TabsTrigger>
+                 <TabsTrigger value="report" data-testid="tab-report" className="text-[10px] font-mono uppercase tracking-widest data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-0">Report</TabsTrigger>
+                 <TabsTrigger value="execlog" data-testid="tab-execlog" className="text-[10px] font-mono uppercase tracking-widest data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-0 flex items-center gap-1">
+                   <Cpu size={10} /> Exec Log
+                 </TabsTrigger>
+                 <TabsTrigger value="custody" data-testid="tab-custody" className="text-[10px] font-mono uppercase tracking-widest data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-0">Custody</TabsTrigger>
                </TabsList>
             </div>
             
@@ -478,6 +505,12 @@ export default function CaseRoom() {
                     </div>
                   </div>
                 )}
+              </ScrollArea>
+            </TabsContent>
+
+            <TabsContent value="execlog" className="flex-1 overflow-hidden m-0 data-[state=active]:flex flex-col">
+              <ScrollArea className="flex-1 p-4">
+                <ExecLogPanel logs={logs} />
               </ScrollArea>
             </TabsContent>
 

@@ -124,6 +124,20 @@ export function useInvestigationStream(caseId: string) {
               const parsed = JSON.parse(dataStr) as AgentEvent;
               if (parsed && typeof parsed.type === "string") {
                 setEvents((prev) => [...prev, parsed]);
+                // Refresh persisted data as soon as a new finding lands, so the
+                // reasoning card replaces the live-activity tail without the
+                // ~5s refetchInterval gap. Also refresh on finalized to surface
+                // the report immediately.
+                if (parsed.type === "finding" || parsed.type === "finalized") {
+                  queryClient.invalidateQueries({
+                    queryKey: getGetCaseQueryKey(caseId),
+                  });
+                  if (parsed.type === "finalized") {
+                    queryClient.invalidateQueries({
+                      queryKey: getGetCaseReportQueryKey(caseId),
+                    });
+                  }
+                }
               }
             } catch (err) {
               console.error("Failed to parse SSE event data", err, dataStr);

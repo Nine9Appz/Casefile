@@ -41,7 +41,8 @@ License: MIT.
 - [x] Step 5 — Evidence integrity enforcement (architectural read-only boundary)
 - [x] Step 6 — Autonomous agent reasoning loop (streaming SSE)
 - [x] Step 7 — React frontend case room interface
-- [ ] Step 8 — Streaming polish + bundled sample dataset
+- [x] Step 8 — Streaming polish + bundled sample dataset
+- [x] Step 9 — Structured reasoning cards + training-mode toggle + execution-log viewer
 
 ## Hackathon Timeline
 
