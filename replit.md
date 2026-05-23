@@ -72,7 +72,7 @@ Cadence: teaching-paced, 4–5 build days per week. Buffer of ~17–21 days buil
 - [ ] (3) Architecture diagram
 - [ ] (4) Written description
 - [ ] (5) Dataset documentation
-- [ ] (6) Accuracy report
+- [x] (6) Accuracy report — `docs/accuracy-report.md` (3/3 sample cases pass; reproducer in `.local/accuracy/run.mjs`)
 - [ ] (7) Try-it-out instructions
 - [ ] (8) Structured execution logs (architectural — covered by Steps 2 & 6)
 

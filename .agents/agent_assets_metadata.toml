@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ZIhBgUPVMIwftV-Ev14Ux"
+uri = "file://docs/accuracy-report.md"
+type = "text"
+title = "Protocol SIFT — Accuracy Report (3/3 cases pass)"
