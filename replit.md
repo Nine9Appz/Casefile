@@ -69,8 +69,8 @@ Cadence: teaching-paced, 4–5 build days per week. Buffer of ~17–21 days buil
 
 - [x] (1) MIT-licensed code repo
 - [ ] (2) Demo video
-- [ ] (3) Architecture diagram
-- [ ] (4) Written description
+- [x] (3) Architecture diagram — `docs/architecture.md` (Mermaid: system overview, request-path sequence, integrity layers)
+- [x] (4) Written description — `docs/description.md`
 - [ ] (5) Dataset documentation
 - [x] (6) Accuracy report — `docs/accuracy-report.md` (3/3 sample cases pass; reproducer in `.local/accuracy/run.mjs`)
 - [ ] (7) Try-it-out instructions
