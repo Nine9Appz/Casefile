@@ -14,4 +14,5 @@ export const ArtifactKind = {
   memory_strings: "memory_strings",
   text: "text",
   mcp_endpoint: "mcp_endpoint",
+  disk_image: "disk_image",
 } as const;

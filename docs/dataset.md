@@ -1,6 +1,6 @@
 # Protocol SIFT — Sample Dataset
 
-Three sample cases ship with Protocol SIFT, bundled into the UI as
+Four sample cases ship with Protocol SIFT, bundled into the UI as
 one-click "Load sample" buttons and into the accuracy harness as the
 fixed evaluation set. They were hand-authored to be realistic in shape
 and content, not collected from real customer incidents.
@@ -13,19 +13,23 @@ events.jsonl, detail.json, report.md).
 
 ## Why these three cases
 
-The three were chosen to span the three most common incident classes a
-SOC analyst sees in the first hour of any week — credential attack,
-endpoint malware, and data exfiltration — and to each exercise a
-*different* subset of the agent's capabilities:
+The first three were chosen to span the three most common incident
+classes a SOC analyst sees in the first hour of any week — credential
+attack, endpoint malware, and data exfiltration. The fourth covers
+disk forensics, which is a structurally different evidence type
+(binary, base64-encoded on the wire, hashed over decoded bytes) and
+exercises the only binary-consuming tool in the registry. Each case
+exercises a *different* subset of the agent's capabilities:
 
 | Case | Class | Primary tools exercised | Key behavior under test |
 | --- | --- | --- | --- |
 | SSH Brute Force → Breach | Credential attack | `parse_log`, `build_timeline`, `extract_iocs`, `fetch_url` | Multi-stage attack reconstruction; recognising the brute-force → success → post-exploit pivot |
 | Encoded PowerShell | Malware / phishing | `parse_log`, `extract_iocs`, `fetch_url`, IOC homoglyph capture | Self-correction after threat-intel contradicts initial hypothesis; recognising IDN/homoglyph sender spoofing |
 | DNS Data Exfiltration | Data exfiltration | `parse_log`, `analyze_network`, `extract_iocs`, `fetch_url` | High-volume pattern recognition; identifying covert channel vs. legitimate DNS noise; recognising newly-registered exfil domain |
+| Disk Image Carve | Disk forensics | `analyze_disk_image`, `extract_iocs`, `fetch_url` | Binary-artifact handling end to end (base64 upload, hash-over-bytes, partition parsing, string extraction); recognising that a text-only IOC pass on a binary returns nothing and pivoting to the binary tool |
 
-Together they cover all six forensic tools in `lib/sift-tools/` and
-both finalize phases (`triage → deep_analysis → synthesis →
+Together they cover all seven forensic tools in `lib/sift-tools/` and
+the full finalize cycle (`triage → deep_analysis → synthesis →
 self_correction → finalize`).
 
 ---
@@ -220,6 +224,75 @@ severity=high, confidence=0.84, ~32 s wall time, 1 self-correction.
 
 ---
 
+## Case 4 — Disk Image Carve
+
+- **Sample ID:** `disk-image-carve`
+- **Short label:** Disk Image Carve
+- **Scenario class:** Disk forensics
+- **Target host:** `WIN-FIN-07` (same finance laptop from Case 2)
+- **Source:** ~4 KB raw image carved from unallocated space; treated
+  as cold evidence (must round-trip with hash intact)
+
+### Evidence artifacts
+
+| Filename | Kind | Encoding | Contents |
+| --- | --- | --- | --- |
+| `carved.img` | `disk_image` | `base64` | A synthetic 4096-byte raw image: 512-byte MBR with one bootable Linux partition (type 0x83, startLBA=1, sizeLBA=7) followed by 7 sectors of mostly-zero data with embedded ASCII strings (C2 IP, callback URL, exfil endpoint, implant user + password, `cron @reboot` persistence, last-beacon timestamp). Built programmatically in `buildSampleDiskImage()` so the bytes are deterministic and the artifact never contains real malware |
+| `triage_note.md` | `text` | `text` | SOC L2 triage note framing the carve and listing four triage objectives |
+
+### Why this case exists
+
+Cases 1–3 only exercise text artifacts. This case is the only one that
+exercises:
+
+- The `disk_image` artifact kind end-to-end.
+- The `content_encoding=base64` upload path on `POST /cases/:id/artifacts`.
+- Hashing over **decoded bytes** instead of the UTF-8 stream (so the
+  artifact's `sha256Hash` matches what `sha256sum carved.img` would
+  print on the original file).
+- The binary-consuming `analyze_disk_image` tool (pure-Node MBR/GPT
+  parser, filesystem-signature detector, printable-string extractor,
+  embedded-indicator harvester).
+- The "fallback to the right tool" decision: a text-only `extract_iocs`
+  pass over a base64 string returns nothing useful; the agent must
+  recognise that and reach for `analyze_disk_image`.
+
+### Ground truth (what really happened)
+
+A small fragment of a Linux rescue / staging image was carved off
+WIN-FIN-07's unallocated space. The image has a single bootable Linux
+partition but no detectable filesystem superblock (the carve was too
+shallow). The slack space contains plain-text indicators that, taken
+together, look like staging notes for an implant: a C2 IP
+(`91.219.236.142`), a callback URL on `malware-staging.xyz`, an exfil
+endpoint on `exfil-c2.evil-domain.org`, a credential pair
+(`deploy` / `P@ssw0rd-from-disk`), and a `cron @reboot` persistence
+line under `/opt/.k/run.sh`. The carve alone does not prove execution
+on WIN-FIN-07 — that is the SOC's pivot.
+
+### Expected good agent behavior
+
+- Calls `analyze_disk_image` on `carved.img`; reports MBR + 1 Linux
+  partition + the embedded IP, URLs, and domains.
+- Calls `extract_iocs` on the same artifact; either gets the indicators
+  again (text scan over the base64 string) or gets nothing (the
+  agent must notice and proceed).
+- Calls `fetch_url` against threat intel for at least the C2 IP.
+- Records findings for the embedded credentials and the persistence
+  command — the analyst's true value-add over a raw string dump.
+- Finalises with severity around **medium** (not critical — the carve
+  proves staging artifacts existed, not active compromise), with
+  recommendations to pivot to endpoint / network telemetry on the
+  extracted indicators.
+
+### Current accuracy run
+
+`status=complete`, `stop_reason=finalized`, 0 tool errors,
+severity=medium, ~26 s wall time, 10 tool calls, 2 findings, IOCs:
+1 IP + 2 domains + 2 URLs + 1 user + 1 password + 1 persistence cron.
+
+---
+
 ## How the harness uses this dataset
 
 `.local/accuracy/run.mjs` and `.local/accuracy/run-one.mjs` read
@@ -252,8 +325,12 @@ and machine-readable; the assertions about correctness live in
    `id` (kebab-case), `shortLabel`, `title`, `scenario`,
    `description`, `artifacts[]`.
 2. Each artifact needs `kind` (one of the `ArtifactKind` enum:
-   `log_file`, `network_capture`, `text`, `binary`, …), `filename`,
-   and `content` (string).
+   `log_file`, `network_capture`, `memory_strings`, `text`,
+   `mcp_endpoint`, `disk_image`), `filename`, and `content` (string).
+   For `disk_image` (and any other binary kind added later), set
+   `contentEncoding: "base64"` and pass the base64-encoded bytes as
+   `content`; the server hashes the decoded payload so the stored
+   `sha256Hash` matches `sha256sum file`.
 3. The case becomes available in the UI's "Load sample" dropdown
    automatically and in the accuracy harness via
    `node .local/accuracy/run-one.mjs <id>`.

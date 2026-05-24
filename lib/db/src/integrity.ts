@@ -30,6 +30,12 @@ export interface VerifiedArtifact {
   artifact: CaseArtifact;
   verifiedAt: Date;
   verifiedHash: string;
+  /**
+   * Raw artifact bytes. For text artifacts this is the UTF-8 encoding of
+   * `artifact.content`; for base64 artifacts it is the decoded payload.
+   * Binary-consuming tools should use this rather than `artifact.content`.
+   */
+  bytes: Buffer;
 }
 
 /**
@@ -37,6 +43,12 @@ export interface VerifiedArtifact {
  * This is the ONLY function the rest of the codebase should use to read
  * artifact content. It is the second line of defense (after the database
  * triggers) against silent corruption or tampering.
+ *
+ * The stored SHA-256 is always taken over the raw artifact bytes:
+ *   - text: UTF-8 encoding of `content`
+ *   - base64: the decoded byte payload
+ * which means the hash matches what a user would compute over the source
+ * file with `sha256sum`, regardless of how the bytes ended up in the DB.
  */
 export async function loadVerifiedArtifact(
   artifactId: string,
@@ -48,9 +60,13 @@ export async function loadVerifiedArtifact(
   if (!row) {
     throw new ArtifactNotFoundError(artifactId);
   }
-  const computed = createHash("sha256").update(row.content, "utf8").digest("hex");
+  const bytes =
+    row.contentEncoding === "base64"
+      ? Buffer.from(row.content, "base64")
+      : Buffer.from(row.content, "utf8");
+  const computed = createHash("sha256").update(bytes).digest("hex");
   if (computed !== row.sha256Hash) {
     throw new ArtifactIntegrityError(artifactId, row.sha256Hash, computed);
   }
-  return { artifact: row, verifiedAt: new Date(), verifiedHash: computed };
+  return { artifact: row, verifiedAt: new Date(), verifiedHash: computed, bytes };
 }

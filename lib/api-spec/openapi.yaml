@@ -111,7 +111,9 @@ paths:
       summary: Upload an evidence artifact
       description: |
         Server computes the SHA256 hash and byte size from the submitted content.
-        Maximum content size is 10 MB; larger requests return 413.
+        For `contentEncoding=text`, content is capped at 10 MB of UTF-8.
+        For `contentEncoding=base64`, the decoded payload is capped at 8 MB.
+        Larger requests return 413.
       requestBody:
         required: true
         content:
@@ -371,7 +373,14 @@ components:
       enum: [pending, analyzing, complete, failed]
     ArtifactKind:
       type: string
-      enum: [log_file, network_capture, memory_strings, text, mcp_endpoint]
+      enum: [log_file, network_capture, memory_strings, text, mcp_endpoint, disk_image]
+    ContentEncoding:
+      type: string
+      enum: [text, base64]
+      description: |
+        How `content` is encoded in the request body. `text` (default) stores the
+        UTF-8 bytes directly; `base64` is required for binary artifacts (e.g.
+        disk_image) and is decoded server-side before hashing.
     AnalysisPhase:
       type: string
       enum: [triage, deep_analysis, synthesis, self_correction]
@@ -443,7 +452,12 @@ components:
           maxLength: 255
         content:
           type: string
-          description: Raw evidence content. Max 10 MB after UTF-8 encoding.
+          description: |
+            Raw evidence content. When `contentEncoding` is `text` (default) the
+            UTF-8 byte length is capped at 10 MB. When `contentEncoding` is
+            `base64` the decoded byte length is capped at 8 MB.
+        contentEncoding:
+          $ref: "#/components/schemas/ContentEncoding"
 
     Artifact:
       type: object

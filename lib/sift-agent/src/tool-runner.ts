@@ -11,6 +11,7 @@ const CONTENT_CONSUMING_TOOLS = new Set<ToolName>([
   "logParser",
   "iocExtractor",
   "entropyScanner",
+  "diskImageAnalyzer",
 ]);
 
 export interface RunToolOnArtifactArgs {
@@ -72,7 +73,11 @@ export async function runToolOnArtifact(
         `Artifact ${artifactId} does not belong to case ${caseId} (belongs to ${verified.artifact.caseId})`,
       );
     }
-    const input = { ...(extraInput ?? {}), content: verified.artifact.content };
+    const content =
+      verified.artifact.contentEncoding === "base64"
+        ? verified.bytes.toString("base64")
+        : verified.artifact.content;
+    const input = { ...(extraInput ?? {}), content };
     const result = await invokeTool(toolName, input);
     if (result.ok) {
       ok = true;

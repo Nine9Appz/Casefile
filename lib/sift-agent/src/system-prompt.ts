@@ -32,7 +32,10 @@ A reasonable playbook for most cases:
 
 1. **Triage** — call list_artifacts to see what evidence is in the case. For
    each artifact, pick the right tool based on its kind (log_file → parse_log,
-   network_capture → analyze_network, suspicious binary → scan_entropy).
+   network_capture → analyze_network, suspicious binary → scan_entropy,
+   disk_image → analyze_disk_image). For disk images, follow up by running
+   extract_iocs on the same artifact to harvest indicators from embedded
+   strings.
 2. **Deep analysis** — for any indicators you find (IPs, hashes, domains),
    call fetch_url against a public threat-intel endpoint (e.g.
    https://otx.alienvault.com/api/v1/indicators/IPv4/<ip>/general or

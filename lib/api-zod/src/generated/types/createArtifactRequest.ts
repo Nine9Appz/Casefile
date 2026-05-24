@@ -6,11 +6,16 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ArtifactKind } from "./artifactKind";
+import type { ContentEncoding } from "./contentEncoding";
 
 export interface CreateArtifactRequest {
   kind: ArtifactKind;
   /** @maxLength 255 */
   filename?: string;
-  /** Raw evidence content. Max 10 MB after UTF-8 encoding. */
+  /** Raw evidence content. When `contentEncoding` is `text` (default) the
+UTF-8 byte length is capped at 10 MB. When `contentEncoding` is
+`base64` the decoded byte length is capped at 8 MB.
+ */
   content: string;
+  contentEncoding?: ContentEncoding;
 }

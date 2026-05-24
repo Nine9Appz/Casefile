@@ -132,23 +132,55 @@ export default function CaseRoom() {
   const [artKind, setArtKind] = useState<ArtifactKind>("text");
   const [artFilename, setArtFilename] = useState("");
   const [artContent, setArtContent] = useState("");
+  const [artEncoding, setArtEncoding] = useState<"text" | "base64">("text");
+  const [artDecodedSize, setArtDecodedSize] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_BYTES = 10 * 1024 * 1024;
+  const MAX_TEXT_BYTES = 10 * 1024 * 1024;
+  const MAX_BINARY_BYTES = 8 * 1024 * 1024;
+  const isBinaryKind = artKind === "disk_image";
+
+  // Reset encoding state whenever the operator switches kind so we never
+  // submit a text payload tagged as base64 or vice versa.
+  useEffect(() => {
+    setArtContent("");
+    setArtDecodedSize(0);
+    setArtEncoding(isBinaryKind ? "base64" : "text");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [artKind, isBinaryKind]);
 
   const handleFilePick = async (file: File) => {
     setUploadError(null);
-    if (file.size > MAX_BYTES) {
-      setUploadError(`File is ${(file.size / 1024 / 1024).toFixed(1)}MB; max is 10MB.`);
+    const cap = isBinaryKind ? MAX_BINARY_BYTES : MAX_TEXT_BYTES;
+    if (file.size > cap) {
+      setUploadError(
+        `File is ${(file.size / 1024 / 1024).toFixed(1)}MB; max is ${cap / 1024 / 1024}MB.`,
+      );
       return;
     }
     try {
-      const text = await file.text();
-      setArtContent(text);
+      if (isBinaryKind) {
+        const buf = await file.arrayBuffer();
+        // Chunked base64 encode to avoid arguments-length overflow for big files.
+        const bytes = new Uint8Array(buf);
+        let bin = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        setArtContent(btoa(bin));
+        setArtDecodedSize(bytes.length);
+        setArtEncoding("base64");
+      } else {
+        const text = await file.text();
+        setArtContent(text);
+        setArtDecodedSize(new TextEncoder().encode(text).byteLength);
+        setArtEncoding("text");
+      }
       if (!artFilename) setArtFilename(file.name);
-    } catch (err) {
-      setUploadError("Could not read file as text.");
+    } catch {
+      setUploadError("Could not read file.");
     }
   };
 
@@ -156,10 +188,25 @@ export default function CaseRoom() {
     e.preventDefault();
     setUploadError(null);
     if (!artContent) return;
-    const byteLength = new TextEncoder().encode(artContent).byteLength;
-    if (byteLength > MAX_BYTES) {
-      setUploadError(`Content is ${(byteLength / 1024 / 1024).toFixed(1)}MB; max is 10MB.`);
+    if (isBinaryKind && artEncoding !== "base64") {
+      setUploadError("Disk-image evidence must be uploaded from a file.");
       return;
+    }
+    let byteLength: number;
+    if (artEncoding === "base64") {
+      byteLength = artDecodedSize;
+      if (byteLength > MAX_BINARY_BYTES) {
+        setUploadError(
+          `Decoded binary is ${(byteLength / 1024 / 1024).toFixed(1)}MB; max is 8MB.`,
+        );
+        return;
+      }
+    } else {
+      byteLength = new TextEncoder().encode(artContent).byteLength;
+      if (byteLength > MAX_TEXT_BYTES) {
+        setUploadError(`Content is ${(byteLength / 1024 / 1024).toFixed(1)}MB; max is 10MB.`);
+        return;
+      }
     }
     createArtifact.mutate({
       caseId,
@@ -167,6 +214,7 @@ export default function CaseRoom() {
         kind: artKind,
         filename: artFilename || undefined,
         content: artContent,
+        contentEncoding: artEncoding,
       },
     }, {
       onSuccess: () => {
@@ -304,6 +352,7 @@ export default function CaseRoom() {
                             <option value="memory_strings">Memory Strings</option>
                             <option value="text">Raw Text</option>
                             <option value="mcp_endpoint">MCP Endpoint</option>
+                            <option value="disk_image">Disk Image (.img / .dd / .raw)</option>
                           </select>
                         </div>
                         <div className="space-y-2">
@@ -311,22 +360,40 @@ export default function CaseRoom() {
                           <Input
                             ref={fileInputRef}
                             type="file"
-                            accept=".log,.txt,.json,.csv,.pcap,.cap,.bin,text/*,application/json"
+                            accept={
+                              isBinaryKind
+                                ? ".img,.dd,.raw,.iso,application/octet-stream"
+                                : ".log,.txt,.json,.csv,.pcap,.cap,.bin,text/*,application/json"
+                            }
                             onChange={(e) => {
                               const f = e.target.files?.[0];
                               if (f) void handleFilePick(f);
                             }}
                             className="font-mono bg-card border-border text-xs file:text-primary file:bg-transparent file:border-0 file:font-mono file:uppercase file:text-[10px] file:mr-2"
                           />
-                          <p className="text-[10px] font-mono text-muted-foreground">Max 10MB. Read as UTF-8 text.</p>
+                          <p className="text-[10px] font-mono text-muted-foreground">
+                            {isBinaryKind
+                              ? "Max 8MB. Read as bytes, base64-encoded on the wire."
+                              : "Max 10MB. Read as UTF-8 text."}
+                          </p>
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs font-mono text-muted-foreground uppercase">Filename (optional)</label>
                           <Input value={artFilename} onChange={e=>setArtFilename(e.target.value)} className="font-mono bg-card border-border"/>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-xs font-mono text-muted-foreground uppercase">Content</label>
-                          <Textarea value={artContent} onChange={e=>setArtContent(e.target.value)} required className="font-mono bg-card border-border min-h-[150px]"/>
+                          <label className="text-xs font-mono text-muted-foreground uppercase">
+                            {isBinaryKind ? "Binary payload" : "Content"}
+                          </label>
+                          {isBinaryKind ? (
+                            <div className="font-mono bg-card border border-border rounded p-2 text-xs text-muted-foreground min-h-[60px] flex items-center">
+                              {artContent
+                                ? `Loaded ${artDecodedSize.toLocaleString()} bytes (${artContent.length.toLocaleString()} chars base64). SHA-256 will be computed over the decoded bytes.`
+                                : "Pick a disk-image file above to load its bytes."}
+                            </div>
+                          ) : (
+                            <Textarea value={artContent} onChange={e=>setArtContent(e.target.value)} required className="font-mono bg-card border-border min-h-[150px]"/>
+                          )}
                         </div>
                         {uploadError && (
                           <div className="text-xs font-mono text-destructive border border-destructive/30 bg-destructive/10 rounded p-2">

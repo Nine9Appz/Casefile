@@ -436,7 +436,9 @@ export const useDeleteCase = <
 
 /**
  * Server computes the SHA256 hash and byte size from the submitted content.
-Maximum content size is 10 MB; larger requests return 413.
+For `contentEncoding=text`, content is capped at 10 MB of UTF-8.
+For `contentEncoding=base64`, the decoded payload is capped at 8 MB.
+Larger requests return 413.
 
  * @summary Upload an evidence artifact
  */

@@ -4,7 +4,80 @@ export interface SampleArtifact {
   kind: ArtifactKind;
   filename: string;
   content: string;
+  contentEncoding?: "text" | "base64";
 }
+
+// ---------- Synthetic disk image for the 4th sample case ----------
+// Builds a 4 KB raw image: a 512-byte MBR with one Linux partition (type 0x83,
+// startLBA=1, sizeLBA=7) followed by 7 sectors of mostly-zero data with a few
+// ASCII strings scattered through it so the diskImageAnalyzer can recover
+// embedded IOCs without us shipping any real evidence.
+// NOTE: type annotations are intentionally omitted from this helper so the
+// accuracy harness can `new Function` over this file after a regex strip.
+function buildSampleDiskImage() {
+  const SECTOR = 512;
+  const buf = new Uint8Array(SECTOR * 8);
+
+  // MBR partition entry 0 at offset 446.
+  buf[446] = 0x80; // bootable
+  buf[447] = 0x00; buf[448] = 0x02; buf[449] = 0x00; // start CHS (unused here)
+  buf[450] = 0x83; // partition type: Linux native
+  buf[451] = 0x00; buf[452] = 0x04; buf[453] = 0x04; // end CHS (unused here)
+  // start LBA = 1
+  buf[454] = 0x01; buf[455] = 0x00; buf[456] = 0x00; buf[457] = 0x00;
+  // size LBA = 7
+  buf[458] = 0x07; buf[459] = 0x00; buf[460] = 0x00; buf[461] = 0x00;
+  // MBR signature 0x55AA
+  buf[510] = 0x55;
+  buf[511] = 0xaa;
+
+  // Sprinkle ASCII evidence strings through the partition area (offset >= 512).
+  const fragments = [
+    [0x0200, "Linux rescue image v2.4.1-staging\n"],
+    [0x0300, "C2 server: 91.219.236.142\n"],
+    [0x0480, "callback URL: http://malware-staging.xyz/beacon.php\n"],
+    [0x0640, "exfil endpoint: https://exfil-c2.evil-domain.org/dump\n"],
+    [0x0820, "implant user: deploy\nimplant pass: P@ssw0rd-from-disk\n"],
+    [0x0a00, "scheduled task: cron @reboot /opt/.k/run.sh\n"],
+    [0x0c20, "last beacon: 2026-05-22T18:44:12Z OK\n"],
+  ];
+  for (const [off, text] of fragments) {
+    for (let i = 0; i < text.length; i++) {
+      buf[off + i] = text.charCodeAt(i);
+    }
+  }
+
+  // Base64-encode without Node Buffer (this file runs in the browser bundle).
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < buf.length; i += chunk) {
+    bin += String.fromCharCode(...buf.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+const ransomwareDiskImageBase64 = buildSampleDiskImage();
+
+const ransomwareTriageNote = `Ticket: IR-2026-0142
+Reporter: SOC L2 (M. Okafor)
+Source: forensic acquisition team
+
+A ~4 KB raw disk image was carved from unallocated space on a quarantined
+finance laptop (WIN-FIN-07). The carve targeted an MBR signature, so the
+partition table is intact but no filesystem metadata above it is trustworthy.
+
+Triage objectives:
+  1. Confirm the image really is a partitioned disk (not just random bytes).
+  2. Enumerate the partition table and identify the filesystem(s).
+  3. Recover any printable strings and surface embedded indicators (IPs,
+     domains, URLs, credentials) without mounting the image.
+  4. Decide whether the indicators warrant pivoting onto network logs.
+
+Constraints:
+  - Pure-Node analysis only — no Sleuth Kit, no losetup, no mount.
+  - Treat the image as cold evidence: hash must match the acquisition hash.
+`;
+
 
 export interface SampleCase {
   id: string;
@@ -161,6 +234,23 @@ export const SAMPLE_CASES: SampleCase[] = [
     artifacts: [
       { kind: "network_capture", filename: "bind9_query.log", content: dnsExfilLog },
       { kind: "text", filename: "host_context.md", content: dnsHostContext },
+    ],
+  },
+  {
+    id: "disk-image-carve",
+    shortLabel: "Disk Image Carve",
+    title: "Raw disk image carved from unallocated space on WIN-FIN-07",
+    scenario: "Disk forensics",
+    description:
+      "Forensics handed over a small raw disk image (~4 KB) recovered from unallocated space on the WIN-FIN-07 finance laptop. The acquisition team confirmed an intact MBR signature but could not mount the image. Parse the partition table, identify any embedded filesystem signatures, extract printable strings, and surface any IPs, domains, URLs, or credentials hiding in the slack so the SOC can decide whether to pivot to network telemetry.",
+    artifacts: [
+      {
+        kind: "disk_image",
+        filename: "carved.img",
+        content: ransomwareDiskImageBase64,
+        contentEncoding: "base64",
+      },
+      { kind: "text", filename: "triage_note.md", content: ransomwareTriageNote },
     ],
   },
 ];

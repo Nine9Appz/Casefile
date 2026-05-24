@@ -44,6 +44,21 @@ export const ArtifactKind = {
   memory_strings: "memory_strings",
   text: "text",
   mcp_endpoint: "mcp_endpoint",
+  disk_image: "disk_image",
+} as const;
+
+/**
+ * How `content` is encoded in the request body. `text` (default) stores the
+UTF-8 bytes directly; `base64` is required for binary artifacts (e.g.
+disk_image) and is decoded server-side before hashing.
+
+ */
+export type ContentEncoding =
+  (typeof ContentEncoding)[keyof typeof ContentEncoding];
+
+export const ContentEncoding = {
+  text: "text",
+  base64: "base64",
 } as const;
 
 export type AnalysisPhase = (typeof AnalysisPhase)[keyof typeof AnalysisPhase];
@@ -177,8 +192,12 @@ export interface CreateArtifactRequest {
   kind: ArtifactKind;
   /** @maxLength 255 */
   filename?: string;
-  /** Raw evidence content. Max 10 MB after UTF-8 encoding. */
+  /** Raw evidence content. When `contentEncoding` is `text` (default) the
+UTF-8 byte length is capped at 10 MB. When `contentEncoding` is
+`base64` the decoded byte length is capped at 8 MB.
+ */
   content: string;
+  contentEncoding?: ContentEncoding;
 }
 
 export interface ArtifactWithContent {

@@ -13,9 +13,11 @@ import {
   CreateCaseBody,
 } from "@workspace/api-zod";
 import { BadRequestError, NotFoundError, PayloadTooLargeError } from "../lib/errors";
-import { sha256Hex, utf8ByteLength } from "../lib/hash";
+import { sha256Hex, sha256HexBytes, utf8ByteLength } from "../lib/hash";
 
-const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024; // 10 MB (text)
+const MAX_BINARY_BYTES = 8 * 1024 * 1024; // 8 MB (decoded base64)
+const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 
 const router: IRouter = Router();
 
@@ -99,17 +101,55 @@ router.delete("/cases/:caseId", async (req, res) => {
 router.post("/cases/:caseId/artifacts", async (req, res) => {
   const { caseId } = req.params;
   const body = CreateArtifactBody.parse(req.body);
+  const encoding = body.contentEncoding ?? "text";
 
-  const sizeBytes = utf8ByteLength(body.content);
-  if (sizeBytes > MAX_ARTIFACT_BYTES) {
-    throw new PayloadTooLargeError(
-      "artifact_too_large",
-      `Artifact content (${sizeBytes} bytes) exceeds the 10 MB limit`,
-      { sizeBytes, maxBytes: MAX_ARTIFACT_BYTES },
+  if (encoding === "base64" && !BASE64_RE.test(body.content)) {
+    throw new BadRequestError(
+      "invalid_base64",
+      "content is not valid base64",
     );
   }
 
+  // For text artifacts the SHA-256 is over the UTF-8 byte stream; for base64
+  // artifacts it is over the decoded payload so hashes match `sha256sum file`.
+  let storedHash: string;
+  let sizeBytes: number;
+  if (encoding === "base64") {
+    const decoded = Buffer.from(body.content, "base64");
+    sizeBytes = decoded.length;
+    if (sizeBytes > MAX_BINARY_BYTES) {
+      throw new PayloadTooLargeError(
+        "artifact_too_large",
+        `Decoded binary content (${sizeBytes} bytes) exceeds the 8 MB limit`,
+        { sizeBytes, maxBytes: MAX_BINARY_BYTES },
+      );
+    }
+    storedHash = sha256HexBytes(decoded);
+  } else {
+    sizeBytes = utf8ByteLength(body.content);
+    if (sizeBytes > MAX_ARTIFACT_BYTES) {
+      throw new PayloadTooLargeError(
+        "artifact_too_large",
+        `Artifact content (${sizeBytes} bytes) exceeds the 10 MB limit`,
+        { sizeBytes, maxBytes: MAX_ARTIFACT_BYTES },
+      );
+    }
+    storedHash = sha256Hex(body.content);
+  }
+
+  if (body.kind === "disk_image" && encoding !== "base64") {
+    throw new BadRequestError(
+      "invalid_disk_image_encoding",
+      "disk_image artifacts must be uploaded with contentEncoding=base64",
+    );
+  }
   if (body.kind === "mcp_endpoint") {
+    if (encoding !== "text") {
+      throw new BadRequestError(
+        "invalid_mcp_endpoint",
+        "mcp_endpoint content must be text, not base64",
+      );
+    }
     try {
       // eslint-disable-next-line no-new
       new URL(body.content);
@@ -136,7 +176,8 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
       kind: body.kind,
       filename: body.filename ?? null,
       content: body.content,
-      sha256Hash: sha256Hex(body.content),
+      contentEncoding: encoding,
+      sha256Hash: storedHash,
       sizeBytes,
     })
     .returning({

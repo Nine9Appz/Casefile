@@ -18,6 +18,12 @@ export const artifactKindEnum = pgEnum("artifact_kind", [
   "memory_strings",
   "text",
   "mcp_endpoint",
+  "disk_image",
+]);
+
+export const contentEncodingEnum = pgEnum("content_encoding", [
+  "text",
+  "base64",
 ]);
 
 export const caseArtifactsTable = pgTable(
@@ -30,6 +36,9 @@ export const caseArtifactsTable = pgTable(
     kind: artifactKindEnum("kind").notNull(),
     filename: text("filename"),
     content: text("content").notNull(),
+    contentEncoding: contentEncodingEnum("content_encoding")
+      .notNull()
+      .default("text"),
     sha256Hash: varchar("sha256_hash", { length: 64 }).notNull(),
     sizeBytes: integer("size_bytes").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

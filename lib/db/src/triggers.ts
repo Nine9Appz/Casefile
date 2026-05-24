@@ -8,6 +8,7 @@ BEGIN
      OR NEW.case_id IS DISTINCT FROM OLD.case_id
      OR NEW.kind IS DISTINCT FROM OLD.kind
      OR NEW.content IS DISTINCT FROM OLD.content
+     OR NEW.content_encoding IS DISTINCT FROM OLD.content_encoding
      OR NEW.sha256_hash IS DISTINCT FROM OLD.sha256_hash
      OR NEW.size_bytes IS DISTINCT FROM OLD.size_bytes
      OR NEW.created_at IS DISTINCT FROM OLD.created_at

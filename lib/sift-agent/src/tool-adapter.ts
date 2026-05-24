@@ -169,6 +169,7 @@ type AgentToolName =
   | "parse_log"
   | "extract_iocs"
   | "scan_entropy"
+  | "analyze_disk_image"
   | "build_timeline"
   | "analyze_network"
   | "fetch_url"
@@ -211,6 +212,13 @@ const TOOLS: AgentToolDef[] = [
       "Compute Shannon entropy of an artifact. High entropy (> ~7.5) suggests encryption, compression, or packed malware.",
     schema: ArtifactRefArgs,
     underlyingTool: "entropyScanner",
+  },
+  {
+    name: "analyze_disk_image",
+    description:
+      "Parse a raw disk-image artifact (.img / .dd / .raw). Detects filesystem signatures (NTFS, FAT, ext, ISO9660), MBR or GPT partition table with each partition's type and LBA range, extracts printable ASCII strings, and surfaces embedded IPv4 addresses, domains, and URLs found in those strings. Only valid against artifacts of kind 'disk_image'.",
+    schema: ArtifactRefArgs,
+    underlyingTool: "diskImageAnalyzer",
   },
   {
     name: "build_timeline",
@@ -306,7 +314,8 @@ export async function dispatchToolCall(
       return dispatchListArtifacts(ctx);
     case "parse_log":
     case "extract_iocs":
-    case "scan_entropy": {
+    case "scan_entropy":
+    case "analyze_disk_image": {
       const args = parsed.data as z.infer<typeof ArtifactRefArgs>;
       return dispatchArtifactTool(def.underlyingTool!, args.artifact_id, ctx);
     }

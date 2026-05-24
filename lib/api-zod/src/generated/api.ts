@@ -83,6 +83,7 @@ export const GetCaseResponse = zod.object({
         "memory_strings",
         "text",
         "mcp_endpoint",
+        "disk_image",
       ]),
       filename: zod.string().nullish(),
       sha256Hash: zod
@@ -172,7 +173,9 @@ export const DeleteCaseParams = zod.object({
 
 /**
  * Server computes the SHA256 hash and byte size from the submitted content.
-Maximum content size is 10 MB; larger requests return 413.
+For `contentEncoding=text`, content is capped at 10 MB of UTF-8.
+For `contentEncoding=base64`, the decoded payload is capped at 8 MB.
+Larger requests return 413.
 
  * @summary Upload an evidence artifact
  */
@@ -189,11 +192,20 @@ export const CreateArtifactBody = zod.object({
     "memory_strings",
     "text",
     "mcp_endpoint",
+    "disk_image",
   ]),
   filename: zod.string().max(createArtifactBodyFilenameMax).optional(),
   content: zod
     .string()
-    .describe("Raw evidence content. Max 10 MB after UTF-8 encoding."),
+    .describe(
+      "Raw evidence content. When `contentEncoding` is `text` (default) the\nUTF-8 byte length is capped at 10 MB. When `contentEncoding` is\n`base64` the decoded byte length is capped at 8 MB.\n",
+    ),
+  contentEncoding: zod
+    .enum(["text", "base64"])
+    .optional()
+    .describe(
+      "How `content` is encoded in the request body. `text` (default) stores the\nUTF-8 bytes directly; `base64` is required for binary artifacts (e.g.\ndisk_image) and is decoded server-side before hashing.\n",
+    ),
 });
 
 /**
@@ -217,6 +229,7 @@ export const ListCaseArtifactsResponseItem = zod.object({
     "memory_strings",
     "text",
     "mcp_endpoint",
+    "disk_image",
   ]),
   filename: zod.string().nullish(),
   sha256Hash: zod
@@ -251,6 +264,7 @@ export const GetArtifactResponse = zod.object({
     "memory_strings",
     "text",
     "mcp_endpoint",
+    "disk_image",
   ]),
   filename: zod.string().nullish(),
   sha256Hash: zod

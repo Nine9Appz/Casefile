@@ -61,6 +61,7 @@ export default function CaseList() {
           kind: artifact.kind,
           filename: artifact.filename,
           content: artifact.content,
+          contentEncoding: artifact.contentEncoding,
         });
       }
       queryClient.invalidateQueries({ queryKey: getListCasesQueryKey() });
