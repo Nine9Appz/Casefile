@@ -201,6 +201,37 @@ The runs surfaced four issues, none of which blocked completion:
 None of these are blockers for the hackathon submission, but #4 is the
 most visible gap and would be a one-day fix.
 
+### Fixes applied (2026-05-24 follow-up)
+
+All four issues above were addressed in a same-day patch and the suite
+re-ran clean:
+
+1. `McpFetcherInput.headers/body` and `TimelineEventInput.source` switched
+   from `.optional()` to `.nullish()` in `lib/sift-tools/`. The agent's
+   `null` shapes now flow through without rejection. Verified: 0 tool
+   errors across all three cases on re-run (vs. 5 on the original run).
+2. Same root cause as #1; same fix resolves it.
+3. `iocExtractor` domain regex rewritten with Unicode property classes
+   (`\p{L}\p{N}`) and Unicode-aware lookarounds in place of ASCII `\b`.
+   A new `suspiciousDomains` output array flags any captured domain
+   (including those embedded in email addresses) whose labels mix ASCII
+   Latin with non-ASCII letters — a strong homoglyph / IDN-spoofing
+   signal. Unit-verified against `corp-fіnance.com` and `payρal.com`.
+4. New `incident_severity` Postgres enum
+   (`informational | low | medium | high | critical`) added to
+   `incident_reports`. `FinalizeArgs` requires it; the system prompt
+   teaches the five levels. Re-run produced: SSH = high, PowerShell =
+   medium, DNS = high — all consistent with each scenario's blast
+   radius.
+
+Re-run summary (`node .local/accuracy/run-one.mjs <id>` per case):
+
+| Case | Status | Tool Errors | Severity | Wall Time |
+| --- | --- | --- | --- | --- |
+| SSH Brute Force → Breach | complete | 0 | high | 38.2 s |
+| Encoded PowerShell | complete | 0 | medium | 55.9 s |
+| DNS Data Exfiltration | complete | 0 | high | 32.2 s |
+
 ## What the runs do NOT prove
 
 Limitations of this report:

@@ -129,6 +129,17 @@ export interface ExecutionLog {
   error?: string | null;
 }
 
+export type IncidentReportSeverity =
+  (typeof IncidentReportSeverity)[keyof typeof IncidentReportSeverity];
+
+export const IncidentReportSeverity = {
+  informational: "informational",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
 export type IncidentReportIocsItem = { [key: string]: unknown };
 
 export type IncidentReportTtpsItem = { [key: string]: unknown };
@@ -141,6 +152,7 @@ export interface IncidentReport {
   id: string;
   caseId: string;
   summary: string;
+  severity: IncidentReportSeverity;
   iocs: IncidentReportIocsItem[];
   ttps: IncidentReportTtpsItem[];
   timeline: IncidentReportTimelineItem[];

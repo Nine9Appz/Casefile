@@ -659,7 +659,7 @@ components:
     IncidentReport:
       type: object
       required:
-        [id, caseId, summary, iocs, ttps, timeline, recommendations, generatedAt]
+        [id, caseId, summary, severity, iocs, ttps, timeline, recommendations, generatedAt]
       properties:
         id:
           type: string
@@ -669,6 +669,9 @@ components:
           format: uuid
         summary:
           type: string
+        severity:
+          type: string
+          enum: [informational, low, medium, high, critical]
         iocs:
           type: array
           items:

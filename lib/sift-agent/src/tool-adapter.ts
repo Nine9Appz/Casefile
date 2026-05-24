@@ -111,12 +111,19 @@ const RecordFindingArgs = z
   })
   .strict();
 
+const SEVERITIES = ["informational", "low", "medium", "high", "critical"] as const;
+
 const FinalizeArgs = z
   .object({
     summary: z
       .string()
       .min(1)
       .describe("Plain-language incident summary, 2-6 sentences"),
+    severity: z
+      .enum(SEVERITIES)
+      .describe(
+        "Incident severity. informational = no impact / false positive; low = limited impact, contained; medium = single host or account compromised; high = multiple hosts/accounts or sensitive data exposure; critical = active exfil, ransomware, or domain-wide compromise.",
+      ),
     iocs: z
       .array(
         z.object({
@@ -436,6 +443,7 @@ async function dispatchFinalize(
       .update(incidentReportsTable)
       .set({
         summary: args.summary,
+        severity: args.severity,
         iocs: args.iocs,
         ttps: args.ttps,
         timeline: args.timeline,
@@ -451,6 +459,7 @@ async function dispatchFinalize(
     .values({
       caseId: ctx.caseId,
       summary: args.summary,
+      severity: args.severity,
       iocs: args.iocs,
       ttps: args.ttps,
       timeline: args.timeline,

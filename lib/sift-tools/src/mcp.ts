@@ -6,8 +6,8 @@ import type { ToolDescriptor } from "./types.js";
 export const McpFetcherInput = z.object({
   url: z.string().url(),
   method: z.enum(["GET", "POST"]).default("GET"),
-  headers: z.record(z.string(), z.string()).optional(),
-  body: z.string().optional(),
+  headers: z.record(z.string(), z.string()).nullish(),
+  body: z.string().nullish(),
   timeoutMs: z.number().int().min(100).max(30000).default(10000),
   maxBytes: z.number().int().min(1024).max(2_000_000).default(500_000),
 });

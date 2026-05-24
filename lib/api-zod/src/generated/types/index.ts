@@ -27,6 +27,7 @@ export * from "./healthStatus";
 export * from "./incidentReport";
 export * from "./incidentReportIocsItem";
 export * from "./incidentReportRecommendationsItem";
+export * from "./incidentReportSeverity";
 export * from "./incidentReportTimelineItem";
 export * from "./incidentReportTtpsItem";
 export * from "./notFoundResponse";

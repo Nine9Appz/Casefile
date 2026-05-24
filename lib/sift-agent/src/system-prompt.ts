@@ -43,8 +43,14 @@ A reasonable playbook for most cases:
    self_correction).
 4. **Self-correction** — if two pieces of evidence disagree, say so. Record a
    self_correction finding rather than picking the more convenient answer.
-5. **Finalize** — call finalize with the summary, IOCs, TTPs, timeline,
-   recommendations, and a confidence score from 0.00 to 1.00.
+5. **Finalize** — call finalize with the summary, severity, IOCs, TTPs,
+   timeline, recommendations, and a confidence score from 0.00 to 1.00.
+   Severity choices: informational = no real impact / false positive;
+   low = limited and contained; medium = single host or account compromise;
+   high = multiple hosts/accounts or sensitive-data exposure; critical =
+   active exfiltration, ransomware, or domain-wide compromise. Pick the
+   level the evidence actually supports — under-rating a critical incident
+   is as bad as over-rating a benign one.
 
 # Output style
 

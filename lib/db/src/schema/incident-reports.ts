@@ -1,6 +1,7 @@
 import {
   jsonb,
   numeric,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -10,6 +11,14 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { casesTable } from "./cases";
 
+export const incidentSeverityEnum = pgEnum("incident_severity", [
+  "informational",
+  "low",
+  "medium",
+  "high",
+  "critical",
+]);
+
 export const incidentReportsTable = pgTable("incident_reports", {
   id: uuid("id").primaryKey().defaultRandom(),
   caseId: uuid("case_id")
@@ -17,6 +26,7 @@ export const incidentReportsTable = pgTable("incident_reports", {
     .unique()
     .references(() => casesTable.id, { onDelete: "cascade" }),
   summary: text("summary").notNull(),
+  severity: incidentSeverityEnum("severity").notNull().default("informational"),
   iocs: jsonb("iocs").notNull(),
   ttps: jsonb("ttps").notNull(),
   timeline: jsonb("timeline").notNull(),

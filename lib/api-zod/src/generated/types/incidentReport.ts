@@ -7,6 +7,7 @@
  */
 import type { IncidentReportIocsItem } from "./incidentReportIocsItem";
 import type { IncidentReportRecommendationsItem } from "./incidentReportRecommendationsItem";
+import type { IncidentReportSeverity } from "./incidentReportSeverity";
 import type { IncidentReportTimelineItem } from "./incidentReportTimelineItem";
 import type { IncidentReportTtpsItem } from "./incidentReportTtpsItem";
 
@@ -14,6 +15,7 @@ export interface IncidentReport {
   id: string;
   caseId: string;
   summary: string;
+  severity: IncidentReportSeverity;
   iocs: IncidentReportIocsItem[];
   ttps: IncidentReportTtpsItem[];
   timeline: IncidentReportTimelineItem[];

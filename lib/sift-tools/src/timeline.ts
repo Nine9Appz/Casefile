@@ -4,7 +4,7 @@ import type { ToolDescriptor } from "./types.js";
 export const TimelineEventInput = z.object({
   timestamp: z.string(),
   label: z.string(),
-  source: z.string().optional(),
+  source: z.string().nullish(),
 });
 
 export const TimelineInput = z.object({
