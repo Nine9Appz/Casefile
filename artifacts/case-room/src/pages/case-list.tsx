@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { Terminal, ShieldAlert, Plus, ArrowRight, Sparkles, FileStack } from "lucide-react";
 import { SAMPLE_CASES, type SampleCase } from "@/lib/sample-cases";
 
@@ -224,8 +224,8 @@ export default function CaseList() {
                       c.status === 'failed' ? 'bg-destructive' :
                       'bg-muted'
                     }`} />
-                    <div>
-                      <div className="flex items-center gap-3 mb-1">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-sm ${
                           c.status === 'analyzing' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/20' :
                           c.status === 'complete' ? 'bg-primary/10 text-primary border border-primary/20' :
@@ -234,9 +234,17 @@ export default function CaseList() {
                         }`}>
                           {c.status}
                         </span>
-                        <span className="text-xs text-muted-foreground font-mono">{format(new Date(c.createdAt), "yyyy-MM-dd HH:mm:ss")}</span>
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground bg-muted/40 border border-border px-1.5 py-0.5 rounded-sm">
+                          {c.id.substring(0, 8)}
+                        </span>
+                        <span
+                          className="text-xs text-muted-foreground font-mono"
+                          title={format(new Date(c.createdAt), "yyyy-MM-dd HH:mm:ss")}
+                        >
+                          {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
+                        </span>
                       </div>
-                      <h3 className="font-semibold text-foreground tracking-tight">{c.title}</h3>
+                      <h3 className="font-semibold text-foreground tracking-tight truncate">{c.title}</h3>
                     </div>
                   </div>
                   <ArrowRight className="text-muted-foreground group-hover:text-primary transition-colors" size={20} />

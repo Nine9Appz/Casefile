@@ -44,10 +44,10 @@ export const PHASE_META: Record<AnalysisPhase, PhaseMeta> = {
   self_correction: {
     label: "Self-Correction",
     shortLabel: "REVISE",
-    accent: "text-amber-300",
-    border: "border-amber-400/60",
-    bg: "bg-amber-400/[0.06]",
-    badge: "bg-amber-400/15 text-amber-300 border-amber-400/50",
+    accent: "text-amber-200",
+    border: "border-amber-400/70",
+    bg: "bg-amber-400/[0.09]",
+    badge: "bg-amber-400/30 text-amber-100 border-amber-300/70 font-bold shadow-[0_0_8px_-2px_rgba(251,191,36,0.55)]",
     annotation:
       "Self-correction is the agent contradicting an earlier hypothesis based on new evidence. A good investigation has at least one of these — a clean linear story usually means the agent missed something.",
   },

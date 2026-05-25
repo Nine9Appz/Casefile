@@ -316,12 +316,12 @@ export default function CaseRoom() {
       <div className="flex-1 flex overflow-hidden">
         
         {/* Left Panel: Info & Artifacts */}
-        <div className="w-[300px] lg:w-[350px] border-r border-border bg-sidebar flex flex-col shrink-0">
+        <div className="w-[340px] lg:w-[420px] border-r border-border bg-sidebar flex flex-col shrink-0">
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
               <section>
                 <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-2 flex items-center"><FileText size={12} className="mr-1"/> Brief</h3>
-                <div className="text-sm text-foreground/80 leading-relaxed bg-card border border-border p-3 rounded font-mono">
+                <div className="text-sm text-foreground/85 leading-relaxed bg-card border border-border p-3 rounded break-words">
                   {c.description}
                 </div>
               </section>
@@ -538,37 +538,49 @@ export default function CaseRoom() {
                     <p className="font-mono text-xs uppercase tracking-widest">Report pending completion</p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-6 max-w-full">
                     <div className="space-y-2">
                       <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">Executive Summary</h3>
-                      <p className="text-sm leading-relaxed">{report.summary}</p>
+                      <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">{report.summary}</p>
                     </div>
                     {report.confidenceScore !== null && (
                       <div className="space-y-2">
-                        <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">Confidence</h3>
-                        <div className="flex items-center gap-2">
+                        <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">Confidence &amp; Severity</h3>
+                        <div className="flex items-center gap-3">
                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full bg-primary" style={{ width: `${(report.confidenceScore || 0) * 100}%` }}/>
+                            <div className={`h-full ${severityBarClass(report.severity)}`} style={{ width: `${(report.confidenceScore || 0) * 100}%` }}/>
                           </div>
-                          <span className="font-mono text-xs">{((report.confidenceScore || 0) * 100).toFixed(0)}%</span>
+                          <span className="font-mono text-sm font-bold tabular-nums">{((report.confidenceScore || 0) * 100).toFixed(0)}%</span>
+                          <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border ${severityBadgeClass(report.severity)}`}>
+                            {report.severity}
+                          </span>
                         </div>
                       </div>
                     )}
                     <div className="space-y-2">
-                      <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">IOCs</h3>
-                      {report.iocs.map((ioc, i) => (
-                         <div key={i} className="bg-card border border-border p-2 rounded text-xs font-mono overflow-x-auto">
-                           <pre>{JSON.stringify(ioc, null, 2)}</pre>
-                         </div>
-                      ))}
+                      <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">IOCs <span className="text-muted-foreground">({report.iocs.length})</span></h3>
+                      {report.iocs.length === 0 ? (
+                        <p className="text-xs text-muted-foreground font-mono italic">None recorded</p>
+                      ) : (
+                        <div className="border border-border rounded divide-y divide-border bg-card">
+                          {report.iocs.map((ioc, i) => <IocRow key={i} ioc={ioc} />)}
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2">
-                      <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">Recommendations</h3>
-                      {report.recommendations.map((rec, i) => (
-                         <div key={i} className="bg-card border border-border p-2 rounded text-xs font-mono overflow-x-auto">
-                           <pre>{JSON.stringify(rec, null, 2)}</pre>
-                         </div>
-                      ))}
+                      <h3 className="font-mono text-xs uppercase tracking-widest text-primary border-b border-primary/20 pb-1">Recommendations <span className="text-muted-foreground">({report.recommendations.length})</span></h3>
+                      {report.recommendations.length === 0 ? (
+                        <p className="text-xs text-muted-foreground font-mono italic">None recorded</p>
+                      ) : (
+                        <ol className="space-y-2 list-none">
+                          {report.recommendations.map((rec, i) => (
+                            <li key={i} className="flex gap-2 text-xs leading-relaxed bg-card border border-border p-2 rounded break-words">
+                              <span className="font-mono text-primary shrink-0 tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+                              <span className="whitespace-pre-wrap break-words">{recommendationText(rec)}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                     </div>
                   </div>
                 )}
@@ -625,6 +637,63 @@ export default function CaseRoom() {
           </Tabs>
         </div>
 
+      </div>
+    </div>
+  );
+}
+
+function severityBarClass(severity: string): string {
+  switch (severity) {
+    case "critical": return "bg-red-500";
+    case "high": return "bg-orange-400";
+    case "medium": return "bg-amber-400";
+    case "low": return "bg-emerald-400";
+    default: return "bg-muted-foreground";
+  }
+}
+
+function severityBadgeClass(severity: string): string {
+  switch (severity) {
+    case "critical": return "bg-red-500/15 text-red-300 border-red-400/40";
+    case "high": return "bg-orange-400/15 text-orange-300 border-orange-400/40";
+    case "medium": return "bg-amber-400/15 text-amber-300 border-amber-400/40";
+    case "low": return "bg-emerald-400/15 text-emerald-300 border-emerald-400/40";
+    default: return "bg-muted text-muted-foreground border-border";
+  }
+}
+
+function recommendationText(rec: unknown): string {
+  if (typeof rec === "string") return rec;
+  if (rec && typeof rec === "object") {
+    const r = rec as Record<string, unknown>;
+    for (const key of ["text", "recommendation", "description", "value", "action"]) {
+      const v = r[key];
+      if (typeof v === "string" && v.length > 0) return v;
+    }
+  }
+  return JSON.stringify(rec);
+}
+
+function IocRow({ ioc }: { ioc: unknown }) {
+  const r = (ioc && typeof ioc === "object" ? ioc : {}) as Record<string, unknown>;
+  const type = typeof r.type === "string" ? r.type : "ioc";
+  const value =
+    typeof r.value === "string"
+      ? r.value
+      : typeof r.indicator === "string"
+        ? r.indicator
+        : JSON.stringify(ioc);
+  const context = typeof r.context === "string" ? r.context : null;
+  return (
+    <div className="p-2 grid grid-cols-[64px_1fr] gap-2 items-start text-xs">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 text-center truncate" title={type}>
+        {type}
+      </span>
+      <div className="min-w-0">
+        <div className="font-mono text-foreground break-all">{value}</div>
+        {context && (
+          <div className="text-[10px] text-muted-foreground mt-0.5 break-words">{context}</div>
+        )}
       </div>
     </div>
   );
