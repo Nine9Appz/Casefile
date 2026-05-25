@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { format, formatDistanceToNow } from "date-fns";
-import { Terminal, ShieldAlert, Plus, ArrowRight, Sparkles, FileStack } from "lucide-react";
+import { Terminal, Plus, ArrowRight, Sparkles, FileStack } from "lucide-react";
 import { SAMPLE_CASES, type SampleCase } from "@/lib/sample-cases";
 
 export default function CaseList() {
@@ -78,13 +78,19 @@ export default function CaseList() {
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
       <header className="border-b border-border bg-card/50 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-primary/20 flex items-center justify-center border border-primary/50 text-primary">
-            <ShieldAlert size={18} />
+          <div className="flex items-center gap-2 font-mono text-[9px] tracking-[0.25em] text-primary/80 uppercase">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            <span>protocol_sift // online</span>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-primary">PROTOCOL SIFT</h1>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest">Autonomous Incident Response</p>
+          <div className="h-6 w-px bg-border mx-1" />
+          <div className="flex items-baseline gap-1.5 font-mono leading-none">
+            <span className="text-primary text-xl font-light select-none">$</span>
+            <h1 className="text-foreground text-xl font-medium tracking-tight lowercase">casefile</h1>
+            <span className="inline-block w-[7px] h-[18px] bg-primary -mb-0.5 animate-pulse" aria-hidden />
           </div>
+          <span className="hidden md:inline-block ml-3 text-xs font-mono text-muted-foreground">
+            <span className="text-muted-foreground/60">{"// "}</span>autonomous incident-response
+          </span>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
