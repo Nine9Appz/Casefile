@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   useListCases,
   useCreateCase,
+  useDeleteCase,
   getListCasesQueryKey,
   createArtifact,
 } from "@workspace/api-client-react";
@@ -17,8 +18,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { format, formatDistanceToNow } from "date-fns";
-import { Terminal, Plus, ArrowRight, Sparkles, FileStack } from "lucide-react";
+import { Terminal, Plus, ArrowRight, Sparkles, FileStack, Trash2 } from "lucide-react";
 import { SAMPLE_CASES, type SampleCase } from "@/lib/sample-cases";
 
 export default function CaseList() {
@@ -31,6 +42,15 @@ export default function CaseList() {
   const [, setLocation] = useLocation();
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [sampleError, setSampleError] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const deleteCase = useDeleteCase({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListCasesQueryKey() });
+      },
+    },
+  });
+  const pendingDeleteCase = cases?.find((c) => c.id === pendingDeleteId) ?? null;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,7 +273,23 @@ export default function CaseList() {
                       <h3 className="font-semibold text-foreground tracking-tight truncate">{c.title}</h3>
                     </div>
                   </div>
-                  <ArrowRight className="text-muted-foreground group-hover:text-primary transition-colors" size={20} />
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setPendingDeleteId(c.id);
+                      }}
+                      disabled={c.status === 'analyzing'}
+                      title={c.status === 'analyzing' ? 'Cannot delete while analyzing' : 'Delete case'}
+                      aria-label="Delete case"
+                      className="p-2 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    <ArrowRight className="text-muted-foreground group-hover:text-primary transition-colors ml-1" size={20} />
+                  </div>
                 </div>
               </Link>
             ))}
@@ -261,6 +297,47 @@ export default function CaseList() {
         )}
         </section>
       </main>
+
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteCase.isPending) setPendingDeleteId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this case?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes{" "}
+              <span className="font-mono text-foreground">
+                {pendingDeleteCase?.title ?? "this case"}
+              </span>{" "}
+              and cascades to all uploaded evidence, analysis steps,
+              execution logs, and the incident report. Chain-of-custody
+              history for this case will be lost. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCase.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteCase.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!pendingDeleteId) return;
+                deleteCase.mutate(
+                  { caseId: pendingDeleteId },
+                  {
+                    onSuccess: () => setPendingDeleteId(null),
+                  },
+                );
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteCase.isPending ? "Deleting..." : "Delete case"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
