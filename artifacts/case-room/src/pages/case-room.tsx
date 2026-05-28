@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Terminal, ArrowLeft, Play, SquareSquare, FileText, Activity, Database, Lock, CheckCircle2, ChevronRight, Upload, XCircle, ArrowDown, Sparkles, Cpu } from "lucide-react";
+import { Terminal, ArrowLeft, Play, RotateCw, SquareSquare, FileText, Activity, Database, Lock, CheckCircle2, ChevronRight, Upload, XCircle, ArrowDown, Sparkles, Cpu } from "lucide-react";
 import { format } from "date-fns";
 import { ReasoningCard } from "@/components/reasoning-card";
 import { LiveActivityCard } from "@/components/live-activity";
@@ -292,12 +292,18 @@ export default function CaseRoom() {
               Agent Active
             </div>
           )}
-          {!stream.isStreaming && c.status !== 'analyzing' && c.status !== 'complete' && (
-            <Button 
-              onClick={() => stream.start()} 
+          {!stream.isStreaming && c.status !== 'analyzing' && (
+            <Button
+              onClick={() => stream.start()}
               className="bg-primary text-primary-foreground hover:bg-primary/90 font-mono uppercase tracking-wider text-xs h-8"
             >
-              <Play size={14} className="mr-2" /> Run Investigation
+              {c.status === 'complete' ? (
+                <><RotateCw size={14} className="mr-2" /> Re-run Investigation</>
+              ) : c.status === 'failed' ? (
+                <><RotateCw size={14} className="mr-2" /> Retry Investigation</>
+              ) : (
+                <><Play size={14} className="mr-2" /> Run Investigation</>
+              )}
             </Button>
           )}
           {stream.isStreaming && (
