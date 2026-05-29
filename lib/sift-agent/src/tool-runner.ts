@@ -12,6 +12,7 @@ const CONTENT_CONSUMING_TOOLS = new Set<ToolName>([
   "iocExtractor",
   "entropyScanner",
   "diskImageAnalyzer",
+  "pcapAnalyzer",
 ]);
 
 export interface RunToolOnArtifactArgs {

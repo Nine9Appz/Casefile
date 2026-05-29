@@ -136,6 +136,12 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
       "disk_image artifacts must be uploaded with contentEncoding=base64",
     );
   }
+  if (body.kind === "network_capture" && encoding !== "base64") {
+    throw new BadRequestError(
+      "invalid_network_capture_encoding",
+      "network_capture artifacts (.pcap / .pcapng) must be uploaded with contentEncoding=base64",
+    );
+  }
   if (body.kind === "mcp_endpoint") {
     if (encoding !== "text") {
       throw new BadRequestError(

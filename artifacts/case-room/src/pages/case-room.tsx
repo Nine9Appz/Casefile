@@ -139,7 +139,7 @@ export default function CaseRoom() {
 
   const MAX_TEXT_BYTES = 10 * 1024 * 1024;
   const MAX_BINARY_BYTES = 64 * 1024 * 1024;
-  const isBinaryKind = artKind === "disk_image";
+  const isBinaryKind = artKind === "disk_image" || artKind === "network_capture";
 
   // Reset encoding state whenever the operator switches kind so we never
   // submit a text payload tagged as base64 or vice versa.
@@ -189,7 +189,7 @@ export default function CaseRoom() {
     setUploadError(null);
     if (!artContent) return;
     if (isBinaryKind && artEncoding !== "base64") {
-      setUploadError("Disk-image evidence must be uploaded from a file.");
+      setUploadError("Binary evidence must be uploaded from a file.");
       return;
     }
     let byteLength: number;
@@ -354,7 +354,7 @@ export default function CaseRoom() {
                             className="w-full bg-card border border-border rounded p-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
                           >
                             <option value="log_file">Log File</option>
-                            <option value="network_capture">Network Capture</option>
+                            <option value="network_capture">Network Capture (.pcap / .pcapng)</option>
                             <option value="memory_strings">Memory Strings</option>
                             <option value="text">Raw Text</option>
                             <option value="mcp_endpoint">MCP Endpoint</option>
@@ -367,9 +367,11 @@ export default function CaseRoom() {
                             ref={fileInputRef}
                             type="file"
                             accept={
-                              isBinaryKind
-                                ? ".img,.dd,.raw,.iso,application/octet-stream"
-                                : ".log,.txt,.json,.csv,.pcap,.cap,.bin,text/*,application/json"
+                              artKind === "network_capture"
+                                ? ".pcap,.pcapng,.cap,application/octet-stream"
+                                : isBinaryKind
+                                  ? ".img,.dd,.raw,.iso,application/octet-stream"
+                                  : ".log,.txt,.json,.csv,.bin,text/*,application/json"
                             }
                             onChange={(e) => {
                               const f = e.target.files?.[0];
@@ -395,7 +397,9 @@ export default function CaseRoom() {
                             <div className="font-mono bg-card border border-border rounded p-2 text-xs text-muted-foreground min-h-[60px] flex items-center">
                               {artContent
                                 ? `Loaded ${artDecodedSize.toLocaleString()} bytes (${artContent.length.toLocaleString()} chars base64). SHA-256 will be computed over the decoded bytes.`
-                                : "Pick a disk-image file above to load its bytes."}
+                                : artKind === "network_capture"
+                                  ? "Pick a .pcap / .pcapng capture above to load its bytes."
+                                  : "Pick a disk-image file above to load its bytes."}
                             </div>
                           ) : (
                             <Textarea value={artContent} onChange={e=>setArtContent(e.target.value)} required className="font-mono bg-card border-border min-h-[150px]"/>

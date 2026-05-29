@@ -207,6 +207,7 @@ type AgentToolName =
   | "extract_iocs"
   | "scan_entropy"
   | "analyze_disk_image"
+  | "analyze_pcap"
   | "build_timeline"
   | "analyze_network"
   | "fetch_url"
@@ -256,6 +257,13 @@ const TOOLS: AgentToolDef[] = [
       "Parse a raw disk-image artifact (.img / .dd / .raw). Detects filesystem signatures (NTFS, FAT, ext, ISO9660), MBR or GPT partition table with each partition's type and LBA range, extracts printable ASCII strings, and surfaces embedded IPv4 addresses, domains, and URLs found in those strings. Only valid against artifacts of kind 'disk_image'.",
     schema: ArtifactRefArgs,
     underlyingTool: "diskImageAnalyzer",
+  },
+  {
+    name: "analyze_pcap",
+    description:
+      "Parse a packet-capture artifact (.pcap / .cap / .pcapng) of kind 'network_capture'. Decodes packets into conversation 5-tuples, top talkers, destination endpoints (an 'endpoints' list ready to pass to analyze_network), DNS query names, capture time range, protocol counts, and harvested public IPv4 + domain indicators. Follow up with analyze_network on the endpoints, build_timeline for ordering, and fetch_url to enrich indicators. Only valid against artifacts of kind 'network_capture'.",
+    schema: ArtifactRefArgs,
+    underlyingTool: "pcapAnalyzer",
   },
   {
     name: "build_timeline",
@@ -352,7 +360,8 @@ export async function dispatchToolCall(
     case "parse_log":
     case "extract_iocs":
     case "scan_entropy":
-    case "analyze_disk_image": {
+    case "analyze_disk_image":
+    case "analyze_pcap": {
       const args = parsed.data as z.infer<typeof ArtifactRefArgs>;
       return dispatchArtifactTool(def.underlyingTool!, args.artifact_id, ctx);
     }

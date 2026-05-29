@@ -7,6 +7,7 @@ import { network } from "./network.js";
 import { entropy } from "./entropy.js";
 import { mcpFetcher } from "./mcp.js";
 import { diskImage } from "./diskImage.js";
+import { pcap } from "./pcap.js";
 
 export * from "./types.js";
 export * from "./logParser.js";
@@ -16,6 +17,7 @@ export * from "./network.js";
 export * from "./entropy.js";
 export * from "./mcp.js";
 export * from "./diskImage.js";
+export * from "./pcap.js";
 
 export const TOOL_REGISTRY = {
   logParser,
@@ -25,6 +27,7 @@ export const TOOL_REGISTRY = {
   entropyScanner: entropy,
   mcpFetcher,
   diskImageAnalyzer: diskImage,
+  pcapAnalyzer: pcap,
 } as const;
 
 export type ToolName = keyof typeof TOOL_REGISTRY;

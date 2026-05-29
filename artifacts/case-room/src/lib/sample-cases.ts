@@ -232,7 +232,7 @@ export const SAMPLE_CASES: SampleCase[] = [
     description:
       "Internal DNS resolver logged 4,800+ TXT queries to *.exfil-gateway.com from a production DB read replica in 12 minutes. Subdomains are high-entropy and ~48 chars long. The host has no business reason to talk to that domain. Determine whether this is DNS tunneling exfil, identify the channel, and recommend containment.",
     artifacts: [
-      { kind: "network_capture", filename: "bind9_query.log", content: dnsExfilLog },
+      { kind: "log_file", filename: "bind9_query.log", content: dnsExfilLog },
       { kind: "text", filename: "host_context.md", content: dnsHostContext },
     ],
   },
