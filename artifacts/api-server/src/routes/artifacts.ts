@@ -4,7 +4,7 @@ import {
   loadVerifiedArtifact,
 } from "@workspace/db";
 import { db, caseArtifactsTable, casesTable } from "@workspace/db";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { HttpError, NotFoundError } from "../lib/errors";
 
@@ -24,7 +24,7 @@ router.get("/artifacts/:artifactId", async (req, res) => {
     throw new NotFoundError("artifact_not_found", `Artifact ${artifactId} not found`);
   }
 
-  if (row.caseOwnerId !== null && row.caseOwnerId !== userId) {
+  if (row.caseOwnerId !== userId) {
     throw new NotFoundError("artifact_not_found", `Artifact ${artifactId} not found`);
   }
 

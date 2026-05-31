@@ -1,5 +1,5 @@
 import { analysisStepsTable, casesTable, db, executionLogsTable } from "@workspace/db";
-import { asc, eq, isNull, or } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { NotFoundError } from "../lib/errors";
 
@@ -19,7 +19,7 @@ router.get("/steps/:stepId/logs", async (req, res) => {
     throw new NotFoundError("step_not_found", `Analysis step ${stepId} not found`);
   }
 
-  if (row.caseOwnerId !== null && row.caseOwnerId !== userId) {
+  if (row.caseOwnerId !== userId) {
     throw new NotFoundError("step_not_found", `Analysis step ${stepId} not found`);
   }
 
