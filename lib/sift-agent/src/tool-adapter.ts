@@ -62,59 +62,129 @@ const AnalyzeNetworkArgs = z
   })
   .strict();
 
-/**
- * Strict allowlist of hostname suffixes that fetch_url may contact.
- * Only well-known, read-only threat-intel services are permitted.
- * No free-form external hosts are allowed — this prevents prompt-injection
- * attacks that try to exfiltrate case data to attacker-controlled servers.
- */
-const FETCH_URL_ALLOWED_HOSTS = new Set([
-  "otx.alienvault.com",
-  "ipinfo.io",
-  "api.ipinfo.io",
-  "ipapi.co",
-  "api.abuseipdb.com",
-  "www.virustotal.com",
-  "virustotal.com",
-  "threatfox-api.abuse.ch",
-  "urlhaus-api.abuse.ch",
-  "hashlookup.circl.lu",
-  "mb-api.abuse.ch",
-  "malpedia.caad.fkie.fraunhofer.de",
-]);
+// ---------- fetch_url endpoint templates ----------
+//
+// The model supplies an endpoint name and an IOC value. The actual URL is
+// constructed here, server-side, from a fixed template. This prevents
+// prompt-injection attacks from embedding arbitrary case data into the URL
+// path or query string of an allowlisted host (exfiltration via URL).
 
-function assertAllowedFetchHost(url: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error(`Invalid URL supplied to fetch_url`);
-  }
-  const hostname = parsed.hostname.toLowerCase();
-  if (!FETCH_URL_ALLOWED_HOSTS.has(hostname)) {
+type IocKind = "ip" | "domain" | "hash" | "family";
+
+interface FetchEndpoint {
+  host: string;
+  iocKind: IocKind;
+  build: (ioc: string) => string;
+  description: string;
+}
+
+/**
+ * IOC validation patterns. Each pattern is intentionally strict so that
+ * only well-formed indicator values can be inserted into a URL template.
+ * Attacker-controlled free-form text will fail these checks.
+ */
+const IOC_PATTERNS: Record<IocKind, RegExp> = {
+  ip: /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/,
+  domain: /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/,
+  hash: /^[a-fA-F0-9]{32,128}$/,
+  family: /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/,
+};
+
+function validateIoc(kind: IocKind, value: string): void {
+  if (!IOC_PATTERNS[kind].test(value)) {
     throw new Error(
-      `fetch_url destination '${hostname}' is not on the approved threat-intel allowlist. ` +
-        `Permitted hosts: ${[...FETCH_URL_ALLOWED_HOSTS].join(", ")}`,
+      `IOC value '${value}' is not a valid ${kind}. ` +
+        `Expected: ${kind === "ip" ? "dotted-decimal IPv4" : kind === "domain" ? "hostname" : kind === "hash" ? "hex string (32-128 chars)" : "alphanumeric family name"}.`,
     );
   }
 }
 
+const FETCH_ENDPOINTS = {
+  ipinfo_ip: {
+    host: "ipinfo.io",
+    iocKind: "ip" as IocKind,
+    build: (ioc: string) => `https://ipinfo.io/${ioc}/json`,
+    description: "IP geolocation and ASN via ipinfo.io",
+  },
+  ipapi_ip: {
+    host: "ipapi.co",
+    iocKind: "ip" as IocKind,
+    build: (ioc: string) => `https://ipapi.co/${ioc}/json/`,
+    description: "IP geolocation via ipapi.co",
+  },
+  otx_ip: {
+    host: "otx.alienvault.com",
+    iocKind: "ip" as IocKind,
+    build: (ioc: string) =>
+      `https://otx.alienvault.com/api/v1/indicators/IPv4/${ioc}/general`,
+    description: "OTX threat-intel for an IPv4 address",
+  },
+  otx_domain: {
+    host: "otx.alienvault.com",
+    iocKind: "domain" as IocKind,
+    build: (ioc: string) =>
+      `https://otx.alienvault.com/api/v1/indicators/domain/${ioc}/general`,
+    description: "OTX threat-intel for a domain",
+  },
+  otx_hash: {
+    host: "otx.alienvault.com",
+    iocKind: "hash" as IocKind,
+    build: (ioc: string) =>
+      `https://otx.alienvault.com/api/v1/indicators/file/${ioc}/general`,
+    description: "OTX threat-intel for a file hash (MD5/SHA1/SHA256)",
+  },
+  hashlookup_hash: {
+    host: "hashlookup.circl.lu",
+    iocKind: "hash" as IocKind,
+    build: (ioc: string) => `https://hashlookup.circl.lu/lookup/sha256/${ioc}`,
+    description: "CIRCL hash lookup for a SHA-256 hash",
+  },
+  mb_hash: {
+    host: "mb-api.abuse.ch",
+    iocKind: "hash" as IocKind,
+    build: (ioc: string) => `https://mb-api.abuse.ch/apiv1/query/hash/${ioc}`,
+    description: "MalwareBazaar sample lookup by hash",
+  },
+  malpedia_family: {
+    host: "malpedia.caad.fkie.fraunhofer.de",
+    iocKind: "family" as IocKind,
+    build: (ioc: string) =>
+      `https://malpedia.caad.fkie.fraunhofer.de/api/get/family/${ioc}`,
+    description: "Malpedia malware family lookup",
+  },
+} as const satisfies Record<string, FetchEndpoint>;
+
+type FetchEndpointName = keyof typeof FETCH_ENDPOINTS;
+
+/**
+ * Strict allowlist of hostnames that fetch_url may contact.
+ * Derived directly from FETCH_ENDPOINTS so it stays in sync automatically.
+ * Passed through to the underlying mcpFetcher for defence-in-depth.
+ */
+const FETCH_URL_ALLOWED_HOSTS: Set<string> = new Set(
+  Object.values(FETCH_ENDPOINTS).map((e) => e.host),
+);
+
 const FetchUrlArgs = z
   .object({
-    url: z
-      .string()
-      .url()
-      .refine((u) => u.startsWith("https://"), {
-        message: "fetch_url only accepts https:// URLs",
-      })
+    endpoint: z
+      .enum(Object.keys(FETCH_ENDPOINTS) as [FetchEndpointName, ...FetchEndpointName[]])
       .describe(
-        "Full https URL to a permitted threat-intel endpoint. " +
-          "Only GET requests are issued. " +
-          "Permitted hosts: otx.alienvault.com, ipinfo.io, api.ipinfo.io, ipapi.co, " +
-          "api.abuseipdb.com, virustotal.com, www.virustotal.com, threatfox-api.abuse.ch, " +
-          "urlhaus-api.abuse.ch, hashlookup.circl.lu, mb-api.abuse.ch, " +
-          "malpedia.caad.fkie.fraunhofer.de. " +
-          "Example: https://otx.alienvault.com/api/v1/indicators/IPv4/<ip>/general",
+        "Named threat-intel endpoint to query. The URL is constructed server-side; you cannot supply a free-form URL. " +
+          "Available endpoints: " +
+          Object.entries(FETCH_ENDPOINTS)
+            .map(([k, v]) => `${k} (${v.description})`)
+            .join("; "),
+      ),
+    ioc: z
+      .string()
+      .min(1)
+      .describe(
+        "The indicator of compromise to look up. Must match the type expected by the chosen endpoint: " +
+          "ip → dotted-decimal IPv4 (e.g. 1.2.3.4); " +
+          "domain → hostname (e.g. evil.example.com); " +
+          "hash → hex string, 32-128 chars (MD5/SHA1/SHA256/SHA512); " +
+          "family → alphanumeric malware family name.",
       ),
   })
   .strict();
@@ -282,7 +352,11 @@ const TOOLS: AgentToolDef[] = [
   {
     name: "fetch_url",
     description:
-      "Fetch an external http(s) URL and return the response body as text along with status code and content-type. The only network tool. Useful for enriching indicators against public, no-auth threat-intel or geolocation endpoints. Has a 10s timeout and ~500KB response cap. Refuses private/loopback hosts (SSRF protection).",
+      "Enrich an indicator of compromise against a named threat-intel endpoint. " +
+      "Supply the endpoint name and the raw IOC value; the URL is constructed server-side from a fixed template. " +
+      "You cannot supply a free-form URL — this prevents case evidence from being embedded in outbound requests. " +
+      "Returns the response body as text along with status code and content-type. " +
+      "Has a 10s timeout and ~500KB response cap. Refuses private/loopback hosts (SSRF protection).",
     schema: FetchUrlArgs,
     underlyingTool: "mcpFetcher",
   },
@@ -375,9 +449,18 @@ export async function dispatchToolCall(
     }
     case "fetch_url": {
       const args = parsed.data as z.infer<typeof FetchUrlArgs>;
-      assertAllowedFetchHost(args.url);
+      const endpointDef = FETCH_ENDPOINTS[args.endpoint as FetchEndpointName];
+      try {
+        validateIoc(endpointDef.iocKind, args.ioc);
+      } catch (e) {
+        return {
+          kind: "error",
+          message: e instanceof Error ? e.message : String(e),
+        };
+      }
+      const builtUrl = endpointDef.build(args.ioc);
       return dispatchStructuredTool(def.underlyingTool!, {
-        url: args.url,
+        url: builtUrl,
         method: "GET",
         allowedHosts: FETCH_URL_ALLOWED_HOSTS,
       }, ctx);
