@@ -6,3 +6,9 @@ id = "ZIhBgUPVMIwftV-Ev14Ux"
 uri = "file://docs/accuracy-report.md"
 type = "text"
 title = "Protocol SIFT — Accuracy Report (3/3 cases pass)"
+
+[[outputs]]
+id = "r7aE1-9Z4HT8of-foV07q"
+uri = "file://docs/architecture-diagram.svg"
+type = "image"
+title = "Casefile architecture diagram (cleaned)"
