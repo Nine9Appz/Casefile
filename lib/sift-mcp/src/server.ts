@@ -6,9 +6,19 @@ import {
   type ToolName,
 } from "@workspace/sift-tools";
 import { z } from "zod";
+import {
+  CONTENT_CONSUMING_TOOL_NAMES,
+  EvidenceVerificationError,
+  evidenceRefSchema,
+  resolveAndVerifyEvidence,
+} from "./evidence.js";
 
 export const SIFT_MCP_SERVER_NAME = "casefile-sift-tools";
 export const SIFT_MCP_SERVER_VERSION = "0.1.0";
+
+const CONTENT_CONSUMING: ReadonlySet<string> = new Set(
+  CONTENT_CONSUMING_TOOL_NAMES,
+);
 
 /**
  * Build the MCP-facing input shape for a tool. We reuse each sift-tool's own
@@ -28,8 +38,27 @@ function inputShapeFor(name: string, schema: z.ZodTypeAny): z.ZodRawShape {
       .optional()
       .describe("Approved hostnames the fetch may contact (allowlist).");
   }
+  if (CONTENT_CONSUMING.has(name)) {
+    // Evidence may arrive inline (`content`) or by reference (`evidenceRef`).
+    // Make `content` optional and add `evidenceRef` so a reference call is not
+    // rejected by the MCP-layer schema before the handler can resolve it. The
+    // handler enforces that exactly one of the two is present.
+    if (shape.content) {
+      shape.content = (shape.content as z.ZodTypeAny).optional();
+    }
+    shape.evidenceRef = evidenceRefSchema
+      .optional()
+      .describe(
+        "Reference to pre-staged binary evidence (path + sha256); the server " +
+          "resolves it under SIFT_MCP_EVIDENCE_ROOT and re-verifies the hash " +
+          "before the tool runs. Use instead of inline content for large " +
+          "binary evidence.",
+      );
+  }
   return shape;
 }
+
+const EVIDENCE_ROOT = process.env.SIFT_MCP_EVIDENCE_ROOT?.trim() || null;
 
 /**
  * Construct an MCP server that exposes every forensic tool in the sift-tools
@@ -59,6 +88,50 @@ export function buildSiftMcpServer(): McpServer {
             ...toolInput,
             allowedHosts: new Set(toolInput.allowedHosts as string[]),
           };
+        }
+        if (CONTENT_CONSUMING.has(name) && toolInput.evidenceRef != null) {
+          // Reference mode: resolve the pre-staged file under the evidence root
+          // and re-verify its SHA-256 before the tool sees any bytes. Any
+          // failure (missing root, path escape, missing file, hash mismatch)
+          // fails closed — the tool does not run on unverified evidence.
+          const parsed = evidenceRefSchema.safeParse(toolInput.evidenceRef);
+          if (!parsed.success) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `invalid evidenceRef: ${parsed.error.message}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          try {
+            const bytes = await resolveAndVerifyEvidence(
+              parsed.data,
+              EVIDENCE_ROOT,
+            );
+            const { evidenceRef: _drop, ...rest } = toolInput;
+            void _drop;
+            toolInput = {
+              ...rest,
+              content:
+                parsed.data.encoding === "base64"
+                  ? bytes.toString("base64")
+                  : bytes.toString("utf8"),
+            };
+          } catch (e) {
+            const msg =
+              e instanceof EvidenceVerificationError
+                ? `evidence verification failed (${e.code}): ${e.message}`
+                : e instanceof Error
+                  ? e.message
+                  : String(e);
+            return {
+              content: [{ type: "text" as const, text: msg }],
+              isError: true,
+            };
+          }
         }
         const result = await invokeTool(name as ToolName, toolInput);
         if (!result.ok) {

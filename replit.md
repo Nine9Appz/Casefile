@@ -32,6 +32,11 @@ License: MIT.
   A stdio entrypoint serves external MCP clients; `src/http.ts` is the
   HTTP server / local mock and `reference/` holds a user-owned VM server.
   Remote path verified against the local mock only, not an external VM.
+  Evidence-passing contract in `src/evidence.ts`: small text/JSON inline
+  (`content` + `sha256`), large binary by reference (`evidenceRef
+  { path, sha256 }`) resolved + re-verified under `SIFT_MCP_EVIDENCE_ROOT`
+  on the server, failing closed on hash mismatch / missing file / path
+  escape. Both the mock and the reference VM server enforce it.
 - **Build**: esbuild (CJS bundle)
 
 ## Key Commands

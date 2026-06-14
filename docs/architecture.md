@@ -75,6 +75,32 @@ content — tagged with its `sha256` — is sent over MCP, in-process or
 remote. The integrity guarantee therefore holds identically in both
 transports for tools the agent feeds content to.
 
+#### Evidence-passing contract (inline vs. reference)
+
+How the verified bytes reach a content-consuming tool depends on size and
+type (`lib/sift-mcp/src/evidence.ts`, contract v1):
+
+- **Inline** — small text/JSON evidence travels in the `content` field
+  alongside its `sha256`. This is the default and the only shape used in
+  in-process mode.
+- **Reference** — large *binary* evidence (disk/memory images, pcaps;
+  `contentEncoding === "base64"` and size `> EVIDENCE_INLINE_MAX_BYTES`,
+  256 KB) is **not** base64-inlined over the wire. In remote mode the
+  agent instead sends `evidenceRef { path, sha256, encoding, sizeBytes }`.
+  The server resolves `path` under its `SIFT_MCP_EVIDENCE_ROOT`, re-hashes
+  the pre-staged file, and **fails closed** (the tool does not run) if the
+  root is unset, the path escapes the root, the file is missing, or the
+  SHA-256 does not match. The hash is taken over the raw bytes
+  (`sha256sum`-compatible), the same value Casefile stores at upload.
+
+Both the local mock (`http.ts`) and the reference VM server
+(`reference/sift-workstation-server.mjs`) enforce this verification.
+Transferring the bytes onto the Workstation is the operator's
+responsibility (out of scope); the contract is how the agent points at
+pre-staged evidence and how the server proves it is operating on exactly
+the bytes the agent verified. Each execution log records the
+`evidenceMode` (`inline` or `reference`) used.
+
 Remote-only *discovered* tools are different and this is stated plainly:
 they operate on evidence that lives on the Workstation, which the agent
 is not the custodian of and cannot re-hash. For those tools the agent

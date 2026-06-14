@@ -114,7 +114,12 @@ to drop onto a SIFT box ships in `lib/sift-mcp/reference/`. For built-in
 tools, evidence-integrity verification still runs agent-side *before* the
 MCP call in either transport; for remote-only discovered tools (which act
 on evidence held by the Workstation) that guarantee shifts to the VM, and
-every execution log records which endpoint served the call.
+every execution log records which endpoint served the call. Evidence
+reaches a tool by a documented contract (`lib/sift-mcp/src/evidence.ts`):
+small text/JSON is sent inline with its `sha256`, while large binary
+evidence is passed by reference (`{ path, sha256 }`) that the server
+resolves under its evidence root and re-verifies before running — failing
+closed on a missing file or hash mismatch.
 
 **3. The persistence + integrity layer (`lib/db/`).** This is the part
 that makes the agent trustworthy. Postgres triggers make evidence

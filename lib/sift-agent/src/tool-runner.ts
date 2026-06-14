@@ -5,7 +5,12 @@ import {
   ArtifactIntegrityError,
   type VerifiedArtifact,
 } from "@workspace/db";
-import { callSiftTool, getActiveMcpEndpoint } from "@workspace/sift-mcp";
+import {
+  callSiftTool,
+  getActiveMcpEndpoint,
+  isRemoteMcp,
+  shouldReferenceEvidence,
+} from "@workspace/sift-mcp";
 import { type ToolName } from "@workspace/sift-tools";
 
 const CONTENT_CONSUMING_TOOLS = new Set<ToolName>([
@@ -68,6 +73,7 @@ export async function runToolOnArtifact(
   let output: unknown = null;
   let errorMessage: string | null = null;
   let ok = false;
+  let useReference = false;
   try {
     verified = await loadVerifiedArtifact(artifactId);
     if (verified.artifact.caseId !== caseId) {
@@ -75,19 +81,47 @@ export async function runToolOnArtifact(
         `Artifact ${artifactId} does not belong to case ${caseId} (belongs to ${verified.artifact.caseId})`,
       );
     }
-    const content =
-      verified.artifact.contentEncoding === "base64"
-        ? verified.bytes.toString("base64")
-        : verified.artifact.content;
-    // Evidence never leaves the agent without its integrity hash: the verified
-    // SHA-256 travels alongside the content so a remote SIFT Workstation can
-    // re-verify before it processes the bytes. The in-process server ignores
-    // the extra field (the tool schemas strip unknown keys).
-    const input = {
-      ...(extraInput ?? {}),
-      content,
-      sha256: verified.verifiedHash,
-    };
+    // Evidence-passing contract: small text/JSON evidence travels inline; large
+    // *binary* evidence (disk/memory images, pcaps) is sent by reference so a
+    // multi-GB image is not base64-inlined over the wire. Reference mode only
+    // applies when a remote server is configured — the in-process server has no
+    // pre-staged evidence root and operates on the inline bytes. Either way the
+    // verified SHA-256 travels with the call so the server can re-verify before
+    // it processes the bytes.
+    useReference =
+      isRemoteMcp() &&
+      shouldReferenceEvidence({
+        contentEncoding: verified.artifact.contentEncoding,
+        sizeBytes: verified.artifact.sizeBytes,
+      });
+    let input: Record<string, unknown>;
+    if (useReference) {
+      if (!verified.artifact.filename) {
+        throw new Error(
+          `Cannot reference large binary artifact ${artifactId} for remote ` +
+            `execution: it has no filename for the Workstation to resolve`,
+        );
+      }
+      input = {
+        ...(extraInput ?? {}),
+        evidenceRef: {
+          path: verified.artifact.filename,
+          sha256: verified.verifiedHash,
+          encoding: "base64",
+          sizeBytes: verified.artifact.sizeBytes,
+        },
+      };
+    } else {
+      const content =
+        verified.artifact.contentEncoding === "base64"
+          ? verified.bytes.toString("base64")
+          : verified.artifact.content;
+      input = {
+        ...(extraInput ?? {}),
+        content,
+        sha256: verified.verifiedHash,
+      };
+    }
     const result = await callSiftTool(toolName, input);
     if (result.ok) {
       ok = true;
@@ -132,6 +166,7 @@ export async function runToolOnArtifact(
     artifactId,
     sha256: verified?.verifiedHash ?? null,
     mcpEndpoint: getActiveMcpEndpoint(),
+    evidenceMode: useReference ? "reference" : "inline",
     extraInput: extraInput ?? {},
   };
   const [logRow] = await db

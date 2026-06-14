@@ -32,7 +32,7 @@ function buildSampleDiskImage() {
   buf[511] = 0xaa;
 
   // Sprinkle ASCII evidence strings through the partition area (offset >= 512).
-  const fragments = [
+  const fragments: [number, string][] = [
     [0x0200, "Linux rescue image v2.4.1-staging\n"],
     [0x0300, "C2 server: 91.219.236.142\n"],
     [0x0480, "callback URL: http://malware-staging.xyz/beacon.php\n"],

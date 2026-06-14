@@ -144,7 +144,11 @@ over the network instead:
    ```bash
    # on the SIFT Workstation VM
    npm install @modelcontextprotocol/sdk zod
-   SIFT_MCP_TOKEN=<a-long-random-secret> node sift-workstation-server.mjs
+   # SIFT_MCP_EVIDENCE_ROOT is where you pre-stage acquired images; the
+   # server resolves evidence references under it and verifies their SHA-256.
+   SIFT_MCP_TOKEN=<a-long-random-secret> \
+   SIFT_MCP_EVIDENCE_ROOT=/cases/evidence \
+   node sift-workstation-server.mjs
    ```
 
 2. **On the agent (api-server) side**, point Casefile at it:
@@ -170,6 +174,18 @@ the Workstation, which the agent cannot re-hash, so that guarantee shifts
 to the VM — keep the VM and its evidence store trusted, always set a
 token, and put the endpoint behind TLS / a private network. Do **not**
 add a generic "run any shell command" tool to your server.
+
+**Evidence-passing contract.** Small text/JSON evidence is sent inline
+(`content` + `sha256`). Large *binary* evidence (disk/memory images,
+pcaps — over 256 KB) is **not** inlined; in remote mode the agent sends a
+reference `evidenceRef { path, sha256, encoding }`. The server resolves
+`path` under its `SIFT_MCP_EVIDENCE_ROOT`, re-hashes the pre-staged file,
+and refuses to run the tool unless the SHA-256 matches (it also rejects a
+missing root, a path that escapes the root, or a missing file). You
+pre-stage the acquired image on the VM (Casefile does not transfer
+multi-GB files); the contract guarantees the tool runs on exactly the
+bytes the agent verified. Both the local mock and the reference server
+enforce it. See [`lib/sift-mcp/src/evidence.ts`](lib/sift-mcp/src/evidence.ts).
 
 **Verification status.** The remote path is exercised inside Replit
 against a local mock that serves the identical contract
