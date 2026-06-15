@@ -335,10 +335,10 @@ export default function CaseRoom() {
       </div>
 
       {/* Main layout */}
-      <div className="flex-1 flex overflow-x-auto overflow-y-hidden">
+      <div className="flex-1 flex overflow-hidden min-w-0">
         
         {/* Left Panel: Info & Artifacts */}
-        <div className={`${mobilePanel === "brief" ? "flex" : "hidden"} lg:flex w-full lg:w-[420px] border-r border-border bg-sidebar flex-col shrink-0`}>
+        <div className={`${mobilePanel === "brief" ? "flex" : "hidden"} lg:flex w-full lg:w-[300px] xl:w-[380px] border-r border-border bg-sidebar flex-col shrink-0`}>
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
               <section>
@@ -454,7 +454,7 @@ export default function CaseRoom() {
         </div>
 
         {/* Center Panel: Reasoning Cards */}
-        <div className={`${mobilePanel === "trace" ? "flex" : "hidden"} lg:flex flex-1 flex-col w-full min-w-0 lg:min-w-[300px] border-r border-border bg-[#0a0a0c]`}>
+        <div className={`${mobilePanel === "trace" ? "flex" : "hidden"} lg:flex flex-1 flex-col w-full min-w-0 lg:min-w-[260px] border-r border-border bg-[#0a0a0c]`}>
           <div className="h-8 border-b border-border bg-card/30 flex items-center justify-between px-4 shrink-0">
             <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center">
               <Terminal size={12} className="mr-2" /> Reasoning Trace
@@ -544,7 +544,7 @@ export default function CaseRoom() {
 
 
         {/* Right Panel: Intelligence / Report */}
-        <div className={`${mobilePanel === "report" ? "flex" : "hidden"} lg:flex w-full lg:w-[400px] bg-sidebar flex-col shrink-0`}>
+        <div className={`${mobilePanel === "report" ? "flex" : "hidden"} lg:flex w-full lg:w-[320px] xl:w-[400px] bg-sidebar flex-col shrink-0`}>
           <Tabs defaultValue="report" className="flex-1 flex flex-col">
             <div className="h-8 border-b border-border bg-card/30 flex items-center px-2 shrink-0">
                <TabsList className="h-6 bg-transparent p-0 gap-4">
@@ -655,12 +655,12 @@ export default function CaseRoom() {
                             {(e.mcpEndpoint || e.evidenceMode) && (
                               <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                 {e.mcpEndpoint && (
-                                  <span className="flex items-center">
-                                    <span className="text-muted-foreground/60 mr-1">via</span>
+                                  <span className="flex items-start min-w-0 max-w-full">
+                                    <span className="text-muted-foreground/60 mr-1 shrink-0">via</span>
                                     {e.mcpEndpoint === "in-process" ? (
                                       <span className="text-sky-400">in-process MCP</span>
                                     ) : (
-                                      <span className="text-amber-400">remote MCP: {e.mcpEndpoint}</span>
+                                      <span className="text-amber-400 break-all min-w-0">remote MCP: {e.mcpEndpoint}</span>
                                     )}
                                   </span>
                                 )}
