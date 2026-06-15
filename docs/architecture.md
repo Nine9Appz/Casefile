@@ -373,10 +373,18 @@ In the default (in-process) mode the agent exposes eleven tool names to
 the model: the eight forensic tools above (executed over the MCP server)
 plus the agent-native `list_artifacts`, `record_finding`, and `finalize`.
 When a remote SIFT Workstation is configured (`SIFT_MCP_URL`), the agent
-additionally discovers the remote's `tools/list` and appends any tool it
-does not already wrap (matched by underlying name) so real Workstation
-capabilities become callable; tools the remote re-implements with the
-same names as the catalog above are not duplicated.
+discovers the remote's `tools/list` but applies a deny-by-default
+allowlist before surfacing any of them to the model. Only tools whose
+names appear in `SIFT_REMOTE_TOOL_ALLOWLIST` (a comma-separated operator
+env var) are added to the model's callable set; everything else the
+Workstation advertises is suppressed. Tools the remote re-implements with
+the same names as the static catalog above are not duplicated regardless
+of the allowlist. If `SIFT_REMOTE_TOOL_ALLOWLIST` is absent or empty, no
+remote-only tools are callable — the model is restricted to the static
+eleven. This is the primary control against prompt-injection through
+attacker-controlled case content: the reachable tool surface is fixed at
+deploy time by the operator, not by what the Workstation happens to
+advertise at runtime.
 
 `mcpFetcher` is defended against SSRF at three levels: literal host
 checks (blocks loopback / RFC1918 / link-local / ULA / CGNAT, including

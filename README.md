@@ -158,22 +158,37 @@ over the network instead:
    export SIFT_MCP_TOKEN=<the-same-secret>   # optional, but recommended
    ```
 
-The agent then connects over Streamable-HTTP, calls `tools/list`, and
-exposes any Workstation tool it does not already wrap to the model
-(generic remote dispatch). Each tool call is recorded in
-`execution_logs` with the serving endpoint. If a remote is configured but
-unreachable, the run fails explicitly — Casefile does **not** silently
-fall back to its simulated in-process tools, so you never get fake
-results while believing you are driving a real Workstation. (To return to
-the built-in tools, unset `SIFT_MCP_URL`.)
+The agent connects over Streamable-HTTP and calls `tools/list` to
+discover what the Workstation offers. However, **only tools you
+explicitly allowlist are ever exposed to the model** — the Workstation
+may advertise additional capabilities, but the agent suppresses them
+unless the operator has named them. This is a deny-by-default control
+against prompt-injection: case titles, descriptions, and uploaded
+evidence are attacker-controlled input, so the reachable tool set must
+be fixed in configuration, not derived from what the Workstation happens
+to advertise at runtime.
+
+```bash
+# Comma-separated list of remote-only tool names the model may call.
+# Any Workstation tool NOT listed here is discovered but never surfaced.
+# If this variable is unset or empty, no remote-only tools are callable.
+export SIFT_REMOTE_TOOL_ALLOWLIST=volatility_memory,yara_scan
+```
+
+Each tool call is recorded in `execution_logs` with the serving endpoint.
+If a remote is configured but unreachable, the run fails explicitly —
+Casefile does **not** silently fall back to its simulated in-process
+tools, so you never get fake results while believing you are driving a
+real Workstation. (To return to the built-in tools, unset `SIFT_MCP_URL`.)
 
 **Trust boundary.** For built-in tools the agent fed content to, evidence
 integrity (SHA-256) is still verified agent-side *before* the MCP call, in
-either transport. Remote-only discovered tools act on evidence held by
+either transport. Remote-only allowlisted tools act on evidence held by
 the Workstation, which the agent cannot re-hash, so that guarantee shifts
 to the VM — keep the VM and its evidence store trusted, always set a
-token, and put the endpoint behind TLS / a private network. Do **not**
-add a generic "run any shell command" tool to your server.
+token, put the endpoint behind TLS / a private network, and keep your
+allowlist to the minimum set of tools you actually need. Do **not** add
+a generic "run any shell command" tool to your server.
 
 **Evidence-passing contract.** Small text/JSON evidence is sent inline
 (`content` + `sha256`). Large *binary* evidence (disk/memory images,

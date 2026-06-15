@@ -415,11 +415,40 @@ export interface BuiltTools {
 }
 
 /**
+ * Returns the set of remote-only tool names the operator has explicitly
+ * permitted the model to call, read from the `SIFT_REMOTE_TOOL_ALLOWLIST`
+ * environment variable (comma-separated). Returns `null` when the variable is
+ * absent or empty, which is treated as "allow nothing" — a deny-by-default
+ * posture that prevents prompt-injected case content from reaching unintended
+ * Workstation capabilities.
+ *
+ * Example: `SIFT_REMOTE_TOOL_ALLOWLIST=volatility_memory,yara_scan`
+ */
+function getRemoteToolAllowlist(): Set<string> | null {
+  const raw = process.env.SIFT_REMOTE_TOOL_ALLOWLIST?.trim();
+  if (!raw) return null;
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return names.length > 0 ? new Set(names) : null;
+}
+
+/**
  * Build the tool catalog exposed to the model. Always includes the agent's
  * static tools. When a remote SIFT MCP server is configured, the agent also
- * asks it (over `tools/list`) what it can do and exposes any *additional* tools
- * — capabilities a real Workstation has that the local catalog does not — so
- * they are genuinely callable by the model rather than renamed stand-ins.
+ * asks it (over `tools/list`) what it can do; however only those
+ * remote-discovered tools whose names appear in `SIFT_REMOTE_TOOL_ALLOWLIST`
+ * are added to the model's callable set. Tools not on the allowlist are
+ * silently suppressed — they remain on the Workstation but the model cannot
+ * reach them. If the allowlist is absent or empty, no remote-only tools are
+ * surfaced (deny by default).
+ *
+ * This allowlist is the primary control against prompt-injection attacks: case
+ * titles, descriptions, and uploaded evidence are attacker-controlled model
+ * input, so the set of tools the model can invoke must be fixed by the operator
+ * in configuration, not determined dynamically from the Workstation's
+ * advertisement.
  *
  * If a remote server is configured but discovery fails, this throws rather than
  * silently degrading to the simulated in-process tools: an operator who pointed
@@ -434,6 +463,7 @@ export async function buildOpenAiTools(): Promise<BuiltTools> {
   }
 
   const discovered: DiscoveredTool[] = await listSiftTools();
+  const allowlist = getRemoteToolAllowlist();
 
   const staticNames = new Set(TOOLS.map((t) => t.name as string));
   const remoteToolNames = new Set<string>();
@@ -442,6 +472,14 @@ export async function buildOpenAiTools(): Promise<BuiltTools> {
     // Skip anything the static catalog already covers, by either the
     // agent-facing name or the underlying sift-tool name.
     if (STATIC_UNDERLYING.has(tool.name) || staticNames.has(tool.name)) {
+      continue;
+    }
+    // Only expose tools that the operator has explicitly allowlisted.
+    // If no allowlist is configured (null), nothing is exposed — deny by
+    // default. This prevents prompt-injected case content from reaching
+    // arbitrary Workstation capabilities that the Workstation happens to
+    // advertise.
+    if (!allowlist?.has(tool.name)) {
       continue;
     }
     remoteToolNames.add(tool.name);
