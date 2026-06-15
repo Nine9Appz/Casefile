@@ -22,13 +22,14 @@ The current deployment is `https://cas3fil3.replit.app` and is `password`-gated 
 - **API server / investigation loop to OpenAI** — evidence-derived content crosses to an external model provider when an investigation runs. That boundary is intentional but sensitive and should remain tightly scoped.
 - **LLM to tool boundary** — untrusted artifact content becomes model context, and the model can choose tools. Tool schemas and dispatch policy must stop prompt-injected evidence from turning into unintended capabilities or data disclosure.
 - **Server to external threat-intel services** — `fetch_url` / `mcpFetcher` is the only intended outbound network path. It must prevent SSRF and also prevent evidence exfiltration through overly flexible request construction.
+- **Server to remote SIFT Workstation** — when `SIFT_MCP_URL` is configured, the API connects to a user-hosted MCP server and imports its advertised tool catalog. This is a privileged boundary because remote-only tool discovery can widen the LLM's effective capabilities beyond the built-in safe catalog.
 - **Authenticated user to other users' case data** — the key application boundary is tenant isolation between analysts and case owners, including legacy rows created before auth ownership existed.
 - **Production vs dev-only artifacts** — `artifacts/mockup-sandbox` is not assumed to ship to production and should be ignored unless production reachability is demonstrated.
 
 ## Scan Anchors
 
 - **Production entry points**: `artifacts/api-server/src/app.ts`, `artifacts/api-server/src/index.ts`, `artifacts/api-server/src/routes/*`, `artifacts/case-room/src/main.tsx`.
-- **Highest-risk areas**: auth/session handling in `artifacts/api-server/src/routes/auth.ts` and `src/lib/auth.ts`; ownership enforcement in `artifacts/api-server/src/lib/case-auth.ts` plus direct-ID routes in `src/routes/artifacts.ts` and `src/routes/steps.ts`; agent/tool dispatch in `lib/sift-agent/src/*`; outbound fetch policy in `lib/sift-tools/src/mcp.ts`.
+- **Highest-risk areas**: auth/session handling in `artifacts/api-server/src/routes/auth.ts` and `src/lib/auth.ts`; ownership enforcement in `artifacts/api-server/src/lib/case-auth.ts` plus direct-ID routes in `src/routes/artifacts.ts` and `src/routes/steps.ts`; agent/tool dispatch in `lib/sift-agent/src/*`; remote tool discovery in `lib/sift-agent/src/tool-adapter.ts` with transport in `lib/sift-mcp/src/client.ts`; outbound fetch policy in `lib/sift-tools/src/mcp.ts`.
 - **Public-ish surfaces after platform gate**: `/api/health`, login/logout/auth callbacks, and the password-gated web app itself.
 - **Authenticated surfaces**: case CRUD, artifact upload/read, execution logs, chain-of-custody, and investigation start/stream endpoints under `/api`.
 - **Legacy-risk surfaces**: rows in `cases.owner_user_id IS NULL` created before auth ownership existed; these should be treated as inaccessible unless explicitly migrated.
@@ -54,4 +55,4 @@ Investigations can consume model tokens and CPU over large artifacts, while uplo
 
 ### Elevation of Privilege
 
-There is no distinct admin plane today, so elevation risk centers on broken object-level authorization and agent/tool overreach. The system must ensure that direct artifact and step-log endpoints enforce the same ownership rules as case-scoped routes, and that prompt-injected evidence cannot cause the LLM-controlled tool layer to exercise broader network or disclosure capability than intended.
+There is no distinct admin plane today, so elevation risk centers on broken object-level authorization and agent/tool overreach. The system must ensure that direct artifact and step-log endpoints enforce the same ownership rules as case-scoped routes, and that prompt-injected evidence cannot cause the LLM-controlled tool layer to exercise broader network or disclosure capability than intended. In particular, remote MCP tools discovered from a SIFT Workstation MUST NOT become automatically callable just because the workstation advertises them; privileged or workstation-local capabilities require an explicit allowlist, wrapper, or approval boundary before untrusted case content can influence them.
