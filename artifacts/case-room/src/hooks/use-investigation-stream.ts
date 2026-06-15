@@ -123,12 +123,19 @@ export function useInvestigationStream(caseId: string) {
             try {
               const parsed = JSON.parse(dataStr) as AgentEvent;
               if (parsed && typeof parsed.type === "string") {
+                console.log(
+                  "[sse-debug] recv",
+                  Date.now(),
+                  parsed.type,
+                  parsed.type === "finding" ? parsed.step : "",
+                );
                 setEvents((prev) => [...prev, parsed]);
                 // Refresh persisted data as soon as a new finding lands, so the
                 // reasoning card replaces the live-activity tail without the
                 // ~5s refetchInterval gap. Also refresh on finalized to surface
                 // the report immediately.
                 if (parsed.type === "finding" || parsed.type === "finalized") {
+                  console.log("[sse-debug] invalidate getCase", Date.now());
                   queryClient.invalidateQueries({
                     queryKey: getGetCaseQueryKey(caseId),
                   });
