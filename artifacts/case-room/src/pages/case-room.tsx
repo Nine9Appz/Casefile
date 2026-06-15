@@ -320,7 +320,7 @@ export default function CaseRoom() {
       </header>
 
       {/* Mobile panel switcher */}
-      <div className="lg:hidden flex shrink-0 border-b border-border bg-card/30">
+      <div className="xl:hidden flex shrink-0 border-b border-border bg-card/30">
         {([["brief", "Brief"], ["trace", "Trace"], ["report", "Report"]] as const).map(([key, label]) => (
           <button
             key={key}
@@ -338,7 +338,7 @@ export default function CaseRoom() {
       <div className="flex-1 flex overflow-hidden min-w-0">
         
         {/* Left Panel: Info & Artifacts */}
-        <div className={`${mobilePanel === "brief" ? "flex" : "hidden"} lg:flex w-full lg:w-[300px] xl:w-[380px] border-r border-border bg-sidebar flex-col shrink-0`}>
+        <div className={`${mobilePanel === "brief" ? "flex" : "hidden"} xl:flex w-full xl:w-[340px] border-r border-border bg-sidebar flex-col shrink-0`}>
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
               <section>
@@ -454,7 +454,7 @@ export default function CaseRoom() {
         </div>
 
         {/* Center Panel: Reasoning Cards */}
-        <div className={`${mobilePanel === "trace" ? "flex" : "hidden"} lg:flex flex-1 flex-col w-full min-w-0 lg:min-w-[260px] border-r border-border bg-[#0a0a0c]`}>
+        <div className={`${mobilePanel === "trace" ? "flex" : "hidden"} xl:flex flex-1 flex-col w-full min-w-0 xl:min-w-[300px] border-r border-border bg-[#0a0a0c]`}>
           <div className="h-8 border-b border-border bg-card/30 flex items-center justify-between px-4 shrink-0">
             <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center">
               <Terminal size={12} className="mr-2" /> Reasoning Trace
@@ -544,7 +544,7 @@ export default function CaseRoom() {
 
 
         {/* Right Panel: Intelligence / Report */}
-        <div className={`${mobilePanel === "report" ? "flex" : "hidden"} lg:flex w-full lg:w-[320px] xl:w-[400px] bg-sidebar flex-col shrink-0`}>
+        <div className={`${mobilePanel === "report" ? "flex" : "hidden"} xl:flex w-full xl:w-[360px] bg-sidebar flex-col shrink-0`}>
           <Tabs defaultValue="report" className="flex-1 flex flex-col">
             <div className="h-8 border-b border-border bg-card/30 flex items-center px-2 shrink-0">
                <TabsList className="h-6 bg-transparent p-0 gap-4">

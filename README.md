@@ -160,7 +160,7 @@ over the network instead:
 
 The agent connects over Streamable-HTTP and calls `tools/list` to
 discover what the Workstation offers. However, **only tools you
-explicitly allowlist are ever exposed to the model** — the Workstation
+explicitly allow via an allowlist are ever exposed to the model** — the Workstation
 may advertise additional capabilities, but the agent suppresses them
 unless the operator has named them. This is a deny-by-default control
 against prompt-injection: case titles, descriptions, and uploaded
