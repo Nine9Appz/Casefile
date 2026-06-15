@@ -1,1 +1,1 @@
-- [MCP tool layer & trust boundary](mcp-tool-layer.md) — forensic tools execute via lib/sift-mcp; evidence-integrity stays agent-side, BEFORE the MCP call.
+- [SSE buffered in workspace preview](sse-preview-buffering.md) — streamed fetch responses arrive all-at-once at close in the preview env; poll the incrementally-written DB for step-by-step UI, don't rely on SSE timing.

@@ -49,15 +49,24 @@ export function useInvestigationStream(caseId: string) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const queryClient = useQueryClient();
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
 
   const stop = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    stopPolling();
     setIsStreaming(false);
-  }, []);
+  }, [stopPolling]);
 
   const invalidateQueries = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(caseId) });
@@ -73,6 +82,20 @@ export function useInvestigationStream(caseId: string) {
     setEvents([]);
     setError(null);
     setIsStreaming(true);
+
+    // The SSE stream can be buffered until it closes by layers between the
+    // server and the browser (observed in the workspace preview), collapsing
+    // the step-by-step reveal into a single burst at the end. Poll the
+    // persisted case while the investigation runs so reasoning cards surface
+    // incrementally as findings are written to the database, independent of
+    // when the stream's events actually arrive.
+    stopPolling();
+    pollIntervalRef.current = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(caseId) });
+      queryClient.invalidateQueries({
+        queryKey: getListCaseStepsQueryKey(caseId),
+      });
+    }, 2000);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -123,19 +146,12 @@ export function useInvestigationStream(caseId: string) {
             try {
               const parsed = JSON.parse(dataStr) as AgentEvent;
               if (parsed && typeof parsed.type === "string") {
-                console.log(
-                  "[sse-debug] recv",
-                  Date.now(),
-                  parsed.type,
-                  parsed.type === "finding" ? parsed.step : "",
-                );
                 setEvents((prev) => [...prev, parsed]);
                 // Refresh persisted data as soon as a new finding lands, so the
                 // reasoning card replaces the live-activity tail without the
                 // ~5s refetchInterval gap. Also refresh on finalized to surface
                 // the report immediately.
                 if (parsed.type === "finding" || parsed.type === "finalized") {
-                  console.log("[sse-debug] invalidate getCase", Date.now());
                   queryClient.invalidateQueries({
                     queryKey: getGetCaseQueryKey(caseId),
                   });
@@ -155,6 +171,7 @@ export function useInvestigationStream(caseId: string) {
         }
       }
 
+      stopPolling();
       setIsStreaming(false);
       invalidateQueries();
     } catch (err: unknown) {
@@ -164,6 +181,7 @@ export function useInvestigationStream(caseId: string) {
         return;
       }
       setError(e.message ?? "An error occurred during the investigation stream");
+      stopPolling();
       setIsStreaming(false);
       invalidateQueries();
     } finally {
@@ -171,13 +189,17 @@ export function useInvestigationStream(caseId: string) {
         abortControllerRef.current = null;
       }
     }
-  }, [caseId, stop, invalidateQueries]);
+  }, [caseId, stop, stopPolling, invalidateQueries, queryClient]);
 
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
     };
   }, []);
