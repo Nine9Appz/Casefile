@@ -481,6 +481,18 @@ export const GetCaseChainOfCustodyResponse = zod.object({
       readAt: zod.coerce.date(),
       ok: zod.boolean(),
       error: zod.string().nullish(),
+      mcpEndpoint: zod
+        .string()
+        .nullish()
+        .describe(
+          'The MCP endpoint that served the tool call: \"in-process\" for the\nbuilt-in transport, or the remote SIFT Workstation URL when\nSIFT_MCP_URL is configured.\n',
+        ),
+      evidenceMode: zod
+        .enum(["inline", "reference"])
+        .nullish()
+        .describe(
+          'How the verified evidence bytes were passed to the tool: \"inline\"\n(content + sha256) or \"reference\" (evidenceRef resolved and\nre-verified server-side). null for reads that failed before a mode\nwas chosen.\n',
+        ),
     }),
   ),
 });

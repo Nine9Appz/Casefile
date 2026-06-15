@@ -38,10 +38,20 @@ router.get("/cases/:caseId/chain-of-custody", async (req, res) => {
   const seenArtifacts = new Set<string>();
   const entries = rows.map((r) => {
     seenArtifacts.add(r.artifactId!);
-    const input = (r.input ?? {}) as { sha256?: string | null };
+    const input = (r.input ?? {}) as {
+      sha256?: string | null;
+      mcpEndpoint?: string | null;
+      evidenceMode?: string | null;
+    };
     const verifiedHash =
       typeof input.sha256 === "string" && input.sha256.length === 64
         ? input.sha256
+        : null;
+    const mcpEndpoint =
+      typeof input.mcpEndpoint === "string" ? input.mcpEndpoint : null;
+    const evidenceMode =
+      input.evidenceMode === "inline" || input.evidenceMode === "reference"
+        ? input.evidenceMode
         : null;
     return {
       executionLogId: r.executionLogId,
@@ -54,6 +64,8 @@ router.get("/cases/:caseId/chain-of-custody", async (req, res) => {
       readAt: r.readAt.toISOString(),
       ok: r.error === null,
       error: r.error,
+      mcpEndpoint,
+      evidenceMode,
     };
   });
 

@@ -652,6 +652,25 @@ export default function CaseRoom() {
                             ) : (
                               <div className="text-[10px] text-destructive mt-0.5 flex items-center"><XCircle size={10} className="mr-1"/> Integrity Error: {e.error}</div>
                             )}
+                            {(e.mcpEndpoint || e.evidenceMode) && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                {e.mcpEndpoint && (
+                                  <span className="flex items-center">
+                                    <span className="text-muted-foreground/60 mr-1">via</span>
+                                    {e.mcpEndpoint === "in-process" ? (
+                                      <span className="text-sky-400">in-process MCP</span>
+                                    ) : (
+                                      <span className="text-amber-400">remote MCP: {e.mcpEndpoint}</span>
+                                    )}
+                                  </span>
+                                )}
+                                {e.evidenceMode && (
+                                  <span className="uppercase tracking-wider px-1 rounded-sm border border-border text-muted-foreground">
+                                    {e.evidenceMode}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

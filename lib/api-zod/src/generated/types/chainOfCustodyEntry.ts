@@ -5,6 +5,7 @@
  * Casefile API
  * OpenAPI spec version: 0.1.0
  */
+import type { ChainOfCustodyEntryEvidenceMode } from "./chainOfCustodyEntryEvidenceMode";
 
 export interface ChainOfCustodyEntry {
   executionLogId: string;
@@ -22,4 +23,15 @@ because it cannot be claimed as verified.
   readAt: Date;
   ok: boolean;
   error?: string | null;
+  /** The MCP endpoint that served the tool call: "in-process" for the
+built-in transport, or the remote SIFT Workstation URL when
+SIFT_MCP_URL is configured.
+ */
+  mcpEndpoint?: string | null;
+  /** How the verified evidence bytes were passed to the tool: "inline"
+(content + sha256) or "reference" (evidenceRef resolved and
+re-verified server-side). null for reads that failed before a mode
+was chosen.
+ */
+  evidenceMode?: ChainOfCustodyEntryEvidenceMode;
 }

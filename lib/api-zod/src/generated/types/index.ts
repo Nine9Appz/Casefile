@@ -21,6 +21,7 @@ export * from "./caseDetail";
 export * from "./caseStatus";
 export * from "./chainOfCustody";
 export * from "./chainOfCustodyEntry";
+export * from "./chainOfCustodyEntryEvidenceMode";
 export * from "./contentEncoding";
 export * from "./createArtifactRequest";
 export * from "./createCaseRequest";

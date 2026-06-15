@@ -258,6 +258,22 @@ export interface ArtifactWithContent {
   content: string;
 }
 
+/**
+ * How the verified evidence bytes were passed to the tool: "inline"
+(content + sha256) or "reference" (evidenceRef resolved and
+re-verified server-side). null for reads that failed before a mode
+was chosen.
+
+ */
+export type ChainOfCustodyEntryEvidenceMode =
+  | (typeof ChainOfCustodyEntryEvidenceMode)[keyof typeof ChainOfCustodyEntryEvidenceMode]
+  | null;
+
+export const ChainOfCustodyEntryEvidenceMode = {
+  inline: "inline",
+  reference: "reference",
+} as const;
+
 export interface ChainOfCustodyEntry {
   executionLogId: string;
   artifactId: string;
@@ -274,6 +290,17 @@ because it cannot be claimed as verified.
   readAt: string;
   ok: boolean;
   error?: string | null;
+  /** The MCP endpoint that served the tool call: "in-process" for the
+built-in transport, or the remote SIFT Workstation URL when
+SIFT_MCP_URL is configured.
+ */
+  mcpEndpoint?: string | null;
+  /** How the verified evidence bytes were passed to the tool: "inline"
+(content + sha256) or "reference" (evidenceRef resolved and
+re-verified server-side). null for reads that failed before a mode
+was chosen.
+ */
+  evidenceMode?: ChainOfCustodyEntryEvidenceMode;
 }
 
 export interface ChainOfCustody {
