@@ -48,6 +48,9 @@ is original code.)
   execution-log model (Postgres records + SSE event stream), the event
   schema, and committed sample recordings in
   [`docs/sample-logs/`](docs/sample-logs/).
+- [`docs/extending.md`](docs/extending.md) — build on Casefile: add a
+  native forensic tool end-to-end (sift-tools → MCP → agent), add a new
+  evidence kind, or attach a real DFIR workstation over MCP.
 
 ## Quick start (Replit — recommended)
 
